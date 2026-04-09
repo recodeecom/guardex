@@ -35,7 +35,7 @@ Package page: https://www.npmjs.com/package/musafety
 ## Security + maintenance posture
 
 - CI matrix on Node 18/20/22 (`npm test`, `node --check`, `npm pack --dry-run`)
-- npm provenance-ready publish config (`publishConfig.provenance=true`)
+- trusted publishing workflow uses `npm publish --provenance` in GitHub Actions
 - OpenSSF Scorecard workflow and weekly Dependabot for GitHub Actions
 - Dedicated security disclosure policy in [`SECURITY.md`](./SECURITY.md)
 

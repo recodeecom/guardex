@@ -40,7 +40,6 @@
   "homepage": "https://github.com/recodeecom/multiagent-safety#readme",
   "funding": "https://github.com/sponsors/recodeecom",
   "publishConfig": {
-    "access": "public",
-    "provenance": true
+    "access": "public"
   }
 }
