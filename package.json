@@ -1,6 +1,6 @@
 {
   "name": "musafety",
-  "version": "0.4.5",
+  "version": "0.4.6",
   "description": "Simple setup command for hardened multi-agent collaboration safety in git repos.",
   "license": "MIT",
   "preferGlobal": true,
@@ -18,7 +18,9 @@
     "bin",
     "templates",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
   ],
   "keywords": [
     "multi-agent",
@@ -26,5 +28,19 @@
     "branch-guard",
     "agent-safety",
     "codex"
-  ]
+  ],
+  "author": "recodeecom",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/recodeecom/multiagent-safety.git"
+  },
+  "bugs": {
+    "url": "https://github.com/recodeecom/multiagent-safety/issues"
+  },
+  "homepage": "https://github.com/recodeecom/multiagent-safety#readme",
+  "funding": "https://github.com/sponsors/recodeecom",
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
 }

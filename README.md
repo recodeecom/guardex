@@ -1,6 +1,8 @@
 # musafety
 
 [![npm version](https://img.shields.io/npm/v/musafety?color=cb3837&logo=npm)](https://www.npmjs.com/package/musafety)
+[![CI](https://github.com/recodeecom/multiagent-safety/actions/workflows/ci.yml/badge.svg)](https://github.com/recodeecom/multiagent-safety/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/recodeecom/multiagent-safety/badge)](https://securityscorecards.dev/viewer/?uri=github.com/recodeecom/multiagent-safety)
 
 Simple, hardened multi-agent safety setup for any git repo.
 
@@ -29,6 +31,13 @@ npm i -g musafety
 ```
 
 Package page: https://www.npmjs.com/package/musafety
+
+## Security + maintenance posture
+
+- CI matrix on Node 18/20/22 (`npm test`, `node --check`, `npm pack --dry-run`)
+- npm provenance-ready publish config (`publishConfig.provenance=true`)
+- OpenSSF Scorecard workflow and weekly Dependabot for GitHub Actions
+- Dedicated security disclosure policy in [`SECURITY.md`](./SECURITY.md)
 
 Related tools:
 - [oh-my-codex (OMX)](https://github.com/Yeachan-Heo/oh-my-codex)
@@ -227,6 +236,13 @@ npm pack --dry-run
 ```
 
 ## Release notes
+
+### v0.4.6
+
+- Added repository metadata (`repository`, `bugs`, `homepage`, `funding`) in package manifest.
+- Added CI workflow for Node 18/20/22 with packaging and syntax verification.
+- Added npm provenance-oriented release workflow, OpenSSF Scorecard workflow, and Dependabot for Actions.
+- Added explicit `SECURITY.md` and `CONTRIBUTING.md`.
 
 ### v0.4.5
 
