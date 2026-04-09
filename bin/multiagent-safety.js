@@ -9,6 +9,7 @@ const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
 
 const TOOL_NAME = 'musafety';
 const LEGACY_NAME = 'multiagent-safety';
+const GLOBAL_TOOLCHAIN_PACKAGES = ['oh-my-codex', '@fission-ai/openspec'];
 
 const TEMPLATE_ROOT = path.resolve(__dirname, '..', 'templates');
 
@@ -47,6 +48,10 @@ const AI_SETUP_PROMPT = `Use this exact checklist to setup multi-agent safety in
 2) Bootstrap safety in this repo:
    musafety setup
 
+   - When asked "Install global OMX + OpenSpec tools now?" reply:
+     - y = run: npm i -g oh-my-codex @fission-ai/openspec
+     - n = skip global installs
+
 3) If setup reports warnings/errors, repair + re-check:
    musafety fix
    musafety scan
@@ -61,7 +66,7 @@ function usage() {
   console.log(`${TOOL_NAME} v${packageJson.version}
 
 Simple usage (recommended):
-  ${TOOL_NAME} setup [--target <path>] [--dry-run]
+  ${TOOL_NAME} setup [--target <path>] [--dry-run] [--yes-global-install|--no-global-install]
   ${TOOL_NAME} copy-prompt
 
 Advanced:
@@ -71,6 +76,7 @@ Advanced:
 
 Notes:
   - Running ${TOOL_NAME} with no command defaults to: ${TOOL_NAME} setup
+  - ${TOOL_NAME} setup asks for Y/N approval before global installs
   - ${LEGACY_NAME} command name is still supported as an alias`);
 }
 
@@ -351,6 +357,14 @@ function parseCommonArgs(rawArgs, defaults) {
       options.json = true;
       continue;
     }
+    if (arg === '--yes-global-install') {
+      options.yesGlobalInstall = true;
+      continue;
+    }
+    if (arg === '--no-global-install') {
+      options.noGlobalInstall = true;
+      continue;
+    }
 
     throw new Error(`Unknown option: ${arg}`);
   }
@@ -360,6 +374,102 @@ function parseCommonArgs(rawArgs, defaults) {
   }
 
   return options;
+}
+
+function isInteractiveTerminal() {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+function readSingleLineFromStdin() {
+  let input = '';
+  const buffer = Buffer.alloc(1);
+
+  while (true) {
+    let bytesRead = 0;
+    try {
+      bytesRead = fs.readSync(process.stdin.fd, buffer, 0, 1);
+    } catch {
+      return input;
+    }
+
+    if (bytesRead === 0) {
+      return input;
+    }
+
+    const char = buffer.toString('utf8', 0, bytesRead);
+    if (char === '\n' || char === '\r') {
+      return input;
+    }
+    input += char;
+  }
+}
+
+function promptYesNo(question, defaultYes = true) {
+  const hint = defaultYes ? '[Y/n]' : '[y/N]';
+  while (true) {
+    process.stdout.write(`${question} ${hint} `);
+    const answer = readSingleLineFromStdin().trim().toLowerCase();
+
+    if (!answer) {
+      return defaultYes;
+    }
+    if (answer === 'y' || answer === 'yes') {
+      return true;
+    }
+    if (answer === 'n' || answer === 'no') {
+      return false;
+    }
+    process.stdout.write('Please answer with y or n.\n');
+  }
+}
+
+function resolveGlobalInstallApproval(options) {
+  if (options.yesGlobalInstall && options.noGlobalInstall) {
+    throw new Error('Cannot use both --yes-global-install and --no-global-install');
+  }
+
+  if (options.yesGlobalInstall) {
+    return { approved: true, source: 'flag' };
+  }
+
+  if (options.noGlobalInstall) {
+    return { approved: false, source: 'flag' };
+  }
+
+  if (!isInteractiveTerminal()) {
+    return { approved: false, source: 'non-interactive-default' };
+  }
+
+  const approved = promptYesNo(
+    'Install global OMX + OpenSpec tools now? (npm i -g oh-my-codex @fission-ai/openspec)',
+    true,
+  );
+  return { approved, source: 'prompt' };
+}
+
+function installGlobalToolchain(options) {
+  if (options.dryRun) {
+    return { status: 'dry-run-skip' };
+  }
+
+  const approval = resolveGlobalInstallApproval(options);
+  if (!approval.approved) {
+    return { status: 'skipped', reason: approval.source };
+  }
+
+  console.log(
+    `[${TOOL_NAME}] Installing global toolchain: npm i -g ${GLOBAL_TOOLCHAIN_PACKAGES.join(' ')}`,
+  );
+  const result = run('npm', ['i', '-g', ...GLOBAL_TOOLCHAIN_PACKAGES], { stdio: 'inherit' });
+  if (result.status !== 0) {
+    const stderr = (result.stderr || '').trim();
+    return {
+      status: 'failed',
+      reason: stderr || 'npm global install failed',
+    };
+  }
+
+  return { status: 'installed' };
 }
 
 function gitRefExists(repoRoot, refName) {
@@ -680,7 +790,25 @@ function setup(rawArgs) {
     skipAgents: false,
     skipPackageJson: false,
     dryRun: false,
+    yesGlobalInstall: false,
+    noGlobalInstall: false,
   });
+
+  const globalInstallStatus = installGlobalToolchain(options);
+  if (globalInstallStatus.status === 'installed') {
+    console.log(`[${TOOL_NAME}] ✅ Global tools installed (oh-my-codex + OpenSpec).`);
+  } else if (globalInstallStatus.status === 'failed') {
+    console.log(
+      `[${TOOL_NAME}] ⚠️ Global install failed: ${globalInstallStatus.reason}\n` +
+      `[${TOOL_NAME}] Continue with local safety setup. You can retry later with:\n` +
+      `  npm i -g ${GLOBAL_TOOLCHAIN_PACKAGES.join(' ')}`,
+    );
+  } else if (globalInstallStatus.status === 'skipped' && globalInstallStatus.reason === 'non-interactive-default') {
+    console.log(
+      `[${TOOL_NAME}] Skipping global installs (non-interactive mode). ` +
+      `Use --yes-global-install to force or run interactively for Y/N prompt.`,
+    );
+  }
 
   const installPayload = runInstallInternal(options);
   printOperations('Setup/install', installPayload, options.dryRun);

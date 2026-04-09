@@ -178,7 +178,20 @@ test('copy-prompt outputs AI setup instructions', () => {
   const result = runNode(['copy-prompt'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /npm i -g musafety/);
+  assert.match(result.stdout, /npm i -g oh-my-codex @fission-ai\/openspec/);
   assert.match(result.stdout, /musafety setup/);
   assert.match(result.stdout, /Codex or Claude/);
   assert.match(result.stdout, /scripts\/agent-file-locks.py claim/);
+});
+
+test('setup dry-run accepts explicit global install approval flags', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--dry-run', '--yes-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Dry run setup done/);
+
+  result = runNode(['setup', '--target', repoDir, '--dry-run', '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Dry run setup done/);
 });

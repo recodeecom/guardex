@@ -15,6 +15,10 @@ npm i -g musafety
 
 Package page: https://www.npmjs.com/package/musafety
 
+Related tools:
+- [oh-my-codex (OMX)](https://github.com/Yeachan-Heo/oh-my-codex)
+- [OpenSpec](https://github.com/Fission-AI/OpenSpec)
+
 ## Fast setup (recommended)
 
 ```sh
@@ -24,9 +28,10 @@ musafety setup
 
 That one command runs:
 
-1. install guardrail scripts/hooks,
-2. repair common safety problems,
-3. scan and report final status.
+1. asks Y/N approval to install global OMX + OpenSpec tools,
+2. installs guardrail scripts/hooks,
+3. repairs common safety problems,
+4. scans and reports final status.
 
 ## Copy prompt for your AI (Codex / Claude)
 
@@ -45,6 +50,10 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
 2) Bootstrap safety in this repo:
    musafety setup
 
+   - When asked "Install global OMX + OpenSpec tools now?" reply:
+     - y = run: npm i -g oh-my-codex @fission-ai/openspec
+     - n = skip global installs
+
 3) If setup reports warnings/errors, repair + re-check:
    musafety fix
    musafety scan
@@ -58,11 +67,14 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
 ## Basic commands
 
 ```sh
-musafety setup [--target <path>] [--dry-run]
+musafety setup [--target <path>] [--dry-run] [--yes-global-install|--no-global-install]
 musafety copy-prompt
 ```
 
 No command defaults to `musafety setup`.
+
+- Interactive setup: prompts for Y/N approval before global OMX/OpenSpec install.
+- Non-interactive setup: skips global installs by default; use `--yes-global-install` to force.
 
 ## Advanced commands
 
@@ -100,3 +112,15 @@ npm test
 node --check bin/multiagent-safety.js
 npm pack --dry-run
 ```
+
+## Release notes
+
+### v0.4.0
+
+- Added setup-time Y/N approval prompt for optional global install of:
+  - `oh-my-codex`
+  - `@fission-ai/openspec`
+- Added setup flags for automation:
+  - `--yes-global-install`
+  - `--no-global-install`
+- Added official repo links for OMX and OpenSpec.
