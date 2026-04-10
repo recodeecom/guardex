@@ -128,7 +128,7 @@ Example output:
 npm i -g musafety
 musafety setup
 musafety doctor
-bash scripts/agent-branch-start.sh "task" "agent-name"
+musafety sandbox "task" "agent-name"
 python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
 bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
 bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
@@ -157,7 +157,7 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
    musafety doctor
 
 4) Confirm next safe agent workflow commands:
-   bash scripts/agent-branch-start.sh "task" "agent-name"
+   musafety sandbox "task" "agent-name"
    python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
    bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
 
@@ -176,6 +176,7 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
 
 ```sh
 musafety status [--target <path>] [--json]
+musafety sandbox [task] [agent] [--target <path>] [--base <branch>] [--worktree-root <path>] [--allow-non-base] [--json]
 musafety setup [--target <path>] [--dry-run] [--yes-global-install|--no-global-install] [--no-gitignore]
 musafety doctor [--target <path>] [--dry-run] [--json] [--keep-stale-locks] [--no-gitignore]
 musafety copy-prompt
@@ -191,6 +192,8 @@ musafety report scorecard [--target <path>] [--repo github.com/<owner>/<repo>] [
 bash scripts/agent-worktree-prune.sh --base dev   # manual stale worktree cleanup
 bash scripts/openspec/init-plan-workspace.sh <plan-slug>   # optional OpenSpec plan scaffold
 ```
+
+`musafety sandbox` keeps your visible checkout on the base branch (for example `main`) and creates an isolated agent worktree under `.omx/agent-worktrees/`, so sandbox terminals can use dedicated `agent/*` branches without flipping your primary Source Control branch.
 
 No command defaults to `musafety status` (non-mutating health/status view).
 `musafety status` reports CLI/runtime info, global OMX/OpenSpec service status, and repo safety service state.

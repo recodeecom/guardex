@@ -171,6 +171,7 @@ test('setup provisions workflow files and repo config', () => {
   }
 
   const packageJson = JSON.parse(fs.readFileSync(path.join(repoDir, 'package.json'), 'utf8'));
+  assert.equal(packageJson.scripts['agent:sandbox'], 'musafety sandbox');
   assert.equal(packageJson.scripts['agent:branch:start'], 'bash ./scripts/agent-branch-start.sh');
   assert.equal(packageJson.scripts['agent:plan:init'], 'bash ./scripts/openspec/init-plan-workspace.sh');
   assert.equal(packageJson.scripts['agent:protect:list'], 'musafety protect list');
@@ -336,6 +337,69 @@ test('protect command manages configured protected branches', () => {
   result = runNode(['protect', 'reset', '--target', repoDir], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /reset to defaults/);
+});
+
+test('sandbox command creates isolated agent worktree and keeps visible checkout on base branch', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+  attachOriginRemote(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply musafety setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['push', 'origin', 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  const sandbox = runNode(['sandbox', 'terminal-flow', 'planner', '--target', repoDir], repoDir);
+  assert.equal(sandbox.status, 0, sandbox.stderr || sandbox.stdout);
+  assert.match(sandbox.stdout, /\[musafety\] Sandbox ready\./);
+  assert.match(sandbox.stdout, /Visible repo branch: dev/);
+  assert.match(sandbox.stdout, /Agent branch: (agent\/[^\s]+)/);
+  assert.match(sandbox.stdout, /Sandbox worktree: (.+)/);
+
+  const branchMatch = sandbox.stdout.match(/Agent branch: (agent\/[^\s]+)/);
+  assert.ok(branchMatch, sandbox.stdout);
+  const worktreeMatch = sandbox.stdout.match(/Sandbox worktree: (.+)/);
+  assert.ok(worktreeMatch, sandbox.stdout);
+  const branchName = branchMatch[1];
+  const worktreePath = worktreeMatch[1].trim();
+
+  assert.equal(fs.existsSync(worktreePath), true, `sandbox worktree missing: ${worktreePath}`);
+  const branchResult = runCmd('git', ['branch', '--show-current'], repoDir);
+  assert.equal(branchResult.status, 0, branchResult.stderr);
+  assert.equal(branchResult.stdout.trim(), 'dev');
+  const branchRef = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${branchName}`], repoDir);
+  assert.equal(branchRef.status, 0, `missing created branch: ${branchName}`);
+});
+
+test('sandbox command blocks when visible checkout is not on base branch', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+  attachOriginRemote(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply musafety setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['push', 'origin', 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  result = runCmd('git', ['checkout', '-b', 'feature/local-experiment'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+
+  const sandbox = runNode(['sandbox', 'terminal-flow', 'planner', '--target', repoDir, '--base', 'dev'], repoDir);
+  assert.equal(sandbox.status, 1, sandbox.stderr || sandbox.stdout);
+  assert.match(sandbox.stderr, /Sandbox expects visible repo branch 'dev'/);
+  assert.match(sandbox.stderr, /--allow-non-base/);
 });
 
 test('pre-commit blocks custom protected branches configured via musafety protect', () => {

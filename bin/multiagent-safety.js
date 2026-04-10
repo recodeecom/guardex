@@ -82,6 +82,7 @@ const COMMAND_TYPO_ALIASES = new Map([
 ]);
 const SUGGESTIBLE_COMMANDS = [
   'status',
+  'sandbox',
   'setup',
   'doctor',
   'report',
@@ -99,6 +100,7 @@ const SUGGESTIBLE_COMMANDS = [
 ];
 const CLI_COMMAND_DESCRIPTIONS = [
   ['status', 'Show musafety CLI + service health without modifying files'],
+  ['sandbox', 'Create an isolated agent worktree sandbox while keeping visible repo branch unchanged'],
   ['setup', 'Install + repair guardrails in a git repo (supports --no-gitignore)'],
   ['doctor', 'Repair safety setup drift, then verify repo safety'],
   ['report', 'Generate security/safety reports (for example: OpenSSF scorecard)'],
@@ -132,7 +134,7 @@ const AI_SETUP_PROMPT = `Use this exact checklist to setup multi-agent safety in
    musafety doctor
 
 4) Confirm next safe agent workflow commands:
-   bash scripts/agent-branch-start.sh "task" "agent-name"
+   musafety sandbox "task" "agent-name"
    python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
    bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
 
@@ -150,7 +152,7 @@ const AI_SETUP_PROMPT = `Use this exact checklist to setup multi-agent safety in
 const AI_SETUP_COMMANDS = `npm i -g musafety
 musafety setup
 musafety doctor
-bash scripts/agent-branch-start.sh "task" "agent-name"
+musafety sandbox "task" "agent-name"
 python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
 bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
 bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
@@ -462,6 +464,7 @@ function ensurePackageScripts(repoRoot, dryRun) {
   }
 
   const wantedScripts = {
+    'agent:sandbox': `${TOOL_NAME} sandbox`,
     'agent:branch:start': 'bash ./scripts/agent-branch-start.sh',
     'agent:branch:finish': 'bash ./scripts/agent-branch-finish.sh',
     'agent:cleanup': 'bash ./scripts/agent-worktree-prune.sh --base dev',
@@ -1065,6 +1068,131 @@ function parseSyncArgs(rawArgs) {
   }
 
   return options;
+}
+
+function parseSandboxArgs(rawArgs) {
+  const options = {
+    target: process.cwd(),
+    task: 'task',
+    agent: 'agent',
+    base: '',
+    worktreeRoot: '.omx/agent-worktrees',
+    allowNonBase: false,
+    json: false,
+  };
+
+  const positional = [];
+
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+    if (arg === '--target') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--target requires a path value');
+      }
+      options.target = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--task') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--task requires a value');
+      }
+      options.task = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--agent') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--agent requires a value');
+      }
+      options.agent = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--base') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--base requires a branch value');
+      }
+      options.base = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--worktree-root') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--worktree-root requires a path value');
+      }
+      options.worktreeRoot = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--allow-non-base') {
+      options.allowNonBase = true;
+      continue;
+    }
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
+    if (arg.startsWith('-')) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+    positional.push(arg);
+  }
+
+  if (positional.length > 2) {
+    throw new Error(`Unexpected argument: ${positional[2]}`);
+  }
+  if (positional[0] && options.task === 'task') {
+    options.task = positional[0];
+  }
+  if (positional[1] && options.agent === 'agent') {
+    options.agent = positional[1];
+  }
+  if (!options.target) {
+    throw new Error('--target requires a path value');
+  }
+
+  return options;
+}
+
+function resolveSandboxBaseBranch(repoRoot, explicitBase) {
+  if (explicitBase) {
+    return explicitBase.trim();
+  }
+
+  const configured = readGitConfig(repoRoot, GIT_BASE_BRANCH_KEY);
+  if (configured) {
+    return configured;
+  }
+
+  const current = currentBranchName(repoRoot);
+  if (current && current !== 'HEAD' && !current.startsWith('agent/')) {
+    return current;
+  }
+
+  if (gitRefExists(repoRoot, 'refs/heads/main') || gitRefExists(repoRoot, 'refs/remotes/origin/main')) {
+    return 'main';
+  }
+
+  return DEFAULT_BASE_BRANCH;
+}
+
+function parseSandboxStartOutput(stdout) {
+  const out = String(stdout || '');
+  const branchMatch = out.match(/^\[agent-branch-start\] Created branch:\s*(.+)$/m);
+  const worktreeMatch = out.match(/^\[agent-branch-start\] Worktree:\s*(.+)$/m);
+  if (!branchMatch || !worktreeMatch) {
+    throw new Error(`Unable to parse agent sandbox output:\n${out.trim()}`);
+  }
+  return {
+    branch: branchMatch[1].trim(),
+    worktreePath: worktreeMatch[1].trim(),
+  };
 }
 
 function syncOperation(repoRoot, strategy, baseRef, ffOnly) {
@@ -2081,6 +2209,70 @@ function copyCommands() {
   process.exitCode = 0;
 }
 
+function sandbox(rawArgs) {
+  const options = parseSandboxArgs(rawArgs);
+  const repoRoot = resolveRepoRoot(options.target);
+  const startScript = path.join(repoRoot, 'scripts', 'agent-branch-start.sh');
+  if (!fs.existsSync(startScript)) {
+    throw new Error(`Missing scripts/agent-branch-start.sh in target repo. Run '${TOOL_NAME} setup' first.`);
+  }
+
+  const baseBranch = resolveSandboxBaseBranch(repoRoot, options.base);
+  const visibleBranchBefore = currentBranchName(repoRoot);
+
+  if (!options.allowNonBase && visibleBranchBefore !== baseBranch) {
+    throw new Error(
+      `Sandbox expects visible repo branch '${baseBranch}' but current branch is '${visibleBranchBefore}'. ` +
+      `Switch first, or pass --allow-non-base to override.`,
+    );
+  }
+
+  const startArgs = [
+    'scripts/agent-branch-start.sh',
+    '--task', options.task,
+    '--agent', options.agent,
+    '--base', baseBranch,
+    '--worktree-root', options.worktreeRoot,
+  ];
+
+  const started = run('bash', startArgs, { cwd: repoRoot });
+  if (started.status !== 0) {
+    throw new Error((started.stderr || started.stdout || 'Sandbox start failed').trim());
+  }
+
+  const parsed = parseSandboxStartOutput(started.stdout || '');
+  const visibleBranchAfter = currentBranchName(repoRoot);
+  if (visibleBranchAfter !== visibleBranchBefore) {
+    throw new Error(
+      `Sandbox changed visible repo branch from '${visibleBranchBefore}' to '${visibleBranchAfter}', which is not allowed.`,
+    );
+  }
+
+  const payload = {
+    repoRoot,
+    baseBranch,
+    visibleBranch: visibleBranchAfter,
+    branch: parsed.branch,
+    worktreePath: parsed.worktreePath,
+  };
+
+  if (options.json) {
+    process.stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+  } else {
+    console.log(`[${TOOL_NAME}] Sandbox ready.`);
+    console.log(`[${TOOL_NAME}] Visible repo branch: ${visibleBranchAfter}`);
+    console.log(`[${TOOL_NAME}] Base branch: ${baseBranch}`);
+    console.log(`[${TOOL_NAME}] Agent branch: ${parsed.branch}`);
+    console.log(`[${TOOL_NAME}] Sandbox worktree: ${parsed.worktreePath}`);
+    console.log(`[${TOOL_NAME}] Open a sandbox terminal:`);
+    console.log(`  cd "${parsed.worktreePath}"`);
+    console.log(`  # commit + push from sandbox, then finish:`);
+    console.log(`  bash scripts/agent-branch-finish.sh --branch "${parsed.branch}"`);
+  }
+
+  process.exitCode = 0;
+}
+
 function sync(rawArgs) {
   const options = parseSyncArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
@@ -2391,6 +2583,11 @@ function main() {
 
   if (command === 'status') {
     status(rest);
+    return;
+  }
+
+  if (command === 'sandbox') {
+    sandbox(rest);
     return;
   }
 

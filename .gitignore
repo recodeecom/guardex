@@ -1,2 +1,15 @@
 .omx/
 node_modules
+
+# multiagent-safety:START
+scripts/agent-branch-start.sh
+scripts/agent-branch-finish.sh
+scripts/agent-worktree-prune.sh
+scripts/agent-file-locks.py
+scripts/install-agent-git-hooks.sh
+scripts/openspec/init-plan-workspace.sh
+.githooks/pre-commit
+.codex/skills/musafety/SKILL.md
+.claude/commands/musafety.md
+.omx/state/agent-file-locks.json
+# multiagent-safety:END
