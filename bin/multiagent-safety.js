@@ -14,6 +14,7 @@ const MAINTAINER_RELEASE_REPO = path.resolve(
   process.env.MUSAFETY_RELEASE_REPO || '/tmp/multiagent-safety',
 );
 const NPM_BIN = process.env.MUSAFETY_NPM_BIN || 'npm';
+const SCORECARD_BIN = process.env.MUSAFETY_SCORECARD_BIN || 'scorecard';
 const GIT_PROTECTED_BRANCHES_KEY = 'multiagent.protectedBranches';
 const GIT_BASE_BRANCH_KEY = 'multiagent.baseBranch';
 const GIT_SYNC_STRATEGY_KEY = 'multiagent.sync.strategy';
@@ -83,7 +84,9 @@ const SUGGESTIBLE_COMMANDS = [
   'status',
   'setup',
   'doctor',
+  'report',
   'copy-prompt',
+  'copy-commands',
   'protect',
   'sync',
   'release',
@@ -98,7 +101,9 @@ const CLI_COMMAND_DESCRIPTIONS = [
   ['status', 'Show musafety CLI + service health without modifying files'],
   ['setup', 'Install + repair guardrails in a git repo (supports --no-gitignore)'],
   ['doctor', 'Repair safety setup drift, then verify repo safety'],
+  ['report', 'Generate security/safety reports (for example: OpenSSF scorecard)'],
   ['copy-prompt', 'Print the AI-ready setup checklist'],
+  ['copy-commands', 'Print setup/workflow commands only (copy-friendly)'],
   ['protect', 'Manage protected branches (list/add/remove/set/reset)'],
   ['sync', 'Check or sync agent branches with origin/<base>'],
   ['install', 'Install templates/locks/hooks without running full setup (supports --no-gitignore)'],
@@ -141,6 +146,36 @@ const AI_SETUP_PROMPT = `Use this exact checklist to setup multi-agent safety in
    musafety sync --check
    musafety sync
 `;
+
+const AI_SETUP_COMMANDS = `npm i -g musafety
+musafety setup
+musafety doctor
+bash scripts/agent-branch-start.sh "task" "agent-name"
+python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
+bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
+bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
+musafety protect add release staging
+musafety sync --check
+musafety sync
+`;
+
+const SCORECARD_RISK_BY_CHECK = {
+  'Dangerous-Workflow': 'Critical',
+  'Code-Review': 'High',
+  Maintained: 'High',
+  'Binary-Artifacts': 'High',
+  'Dependency-Update-Tool': 'High',
+  'Token-Permissions': 'High',
+  Vulnerabilities: 'High',
+  'Branch-Protection': 'High',
+  Fuzzing: 'Medium',
+  'Pinned-Dependencies': 'Medium',
+  SAST: 'Medium',
+  'Security-Policy': 'Medium',
+  'CII-Best-Practices': 'Low',
+  Contributors: 'Low',
+  License: 'Low',
+};
 
 function runtimeVersion() {
   return `${packageJson.name}/${packageJson.version} ${process.platform}-${process.arch} node-${process.version}`;
@@ -229,7 +264,6 @@ ${commandCatalogLines().join('\n')}
 
 NOTES
   - Running ${TOOL_NAME} with no command defaults to: ${TOOL_NAME} status
-  - Default status checks npm for newer musafety and prompts [Y/n] to update (default yes)
   - ${TOOL_NAME} setup asks for Y/N approval before global installs
   - ${LEGACY_NAME} command name is still supported as an alias`);
 
@@ -617,6 +651,204 @@ function parseTargetFlag(rawArgs, defaultTarget = process.cwd()) {
   }
 
   return { target, args: remaining };
+}
+
+function parseReportArgs(rawArgs) {
+  const options = {
+    target: process.cwd(),
+    subcommand: '',
+    repo: '',
+    scorecardJson: '',
+    outputDir: '',
+    date: '',
+    dryRun: false,
+    json: false,
+  };
+
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+    if (arg === '--target') {
+      const next = rawArgs[index + 1];
+      if (!next) throw new Error('--target requires a path value');
+      options.target = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--repo') {
+      const next = rawArgs[index + 1];
+      if (!next) throw new Error('--repo requires a value like github.com/owner/repo');
+      options.repo = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--scorecard-json') {
+      const next = rawArgs[index + 1];
+      if (!next) throw new Error('--scorecard-json requires a path value');
+      options.scorecardJson = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--output-dir') {
+      const next = rawArgs[index + 1];
+      if (!next) throw new Error('--output-dir requires a path value');
+      options.outputDir = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--date') {
+      const next = rawArgs[index + 1];
+      if (!next) throw new Error('--date requires a YYYY-MM-DD value');
+      options.date = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+    if (arg === '--json') {
+      options.json = true;
+      continue;
+    }
+    if (arg.startsWith('-')) {
+      throw new Error(`Unknown option: ${arg}`);
+    }
+    if (!options.subcommand) {
+      options.subcommand = arg;
+      continue;
+    }
+    throw new Error(`Unexpected argument: ${arg}`);
+  }
+
+  return options;
+}
+
+function todayDateStamp() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function inferGithubRepoFromOrigin(repoRoot) {
+  const rawOrigin = readGitConfig(repoRoot, 'remote.origin.url');
+  if (!rawOrigin) return '';
+
+  const httpsMatch = rawOrigin.match(/github\.com[:/](.+?)(?:\.git)?$/i);
+  if (!httpsMatch) return '';
+  const slug = (httpsMatch[1] || '').replace(/^\/+/, '').trim();
+  if (!slug || !slug.includes('/')) return '';
+  return `github.com/${slug}`;
+}
+
+function resolveScorecardRepo(repoRoot, explicitRepo) {
+  if (explicitRepo) {
+    return explicitRepo.trim();
+  }
+  const inferred = inferGithubRepoFromOrigin(repoRoot);
+  if (inferred) return inferred;
+  throw new Error(
+    'Unable to infer GitHub repo from origin remote. Pass --repo github.com/<owner>/<repo>.',
+  );
+}
+
+function runScorecardJson(repo) {
+  const result = run(SCORECARD_BIN, ['--repo', repo, '--format', 'json'], { allowFailure: true });
+  if (result.status !== 0) {
+    const details = (result.stderr || result.stdout || '').trim();
+    throw new Error(
+      `Failed to run scorecard CLI ('${SCORECARD_BIN} --repo ${repo} --format json').${details ? `\n${details}` : ''}`,
+    );
+  }
+
+  try {
+    return JSON.parse(result.stdout || '{}');
+  } catch (error) {
+    throw new Error(`Unable to parse scorecard JSON output: ${error.message}`);
+  }
+}
+
+function readScorecardJsonFile(filePath) {
+  const absolute = path.resolve(filePath);
+  if (!fs.existsSync(absolute)) {
+    throw new Error(`scorecard JSON file not found: ${absolute}`);
+  }
+  try {
+    return JSON.parse(fs.readFileSync(absolute, 'utf8'));
+  } catch (error) {
+    throw new Error(`Unable to parse scorecard JSON file: ${error.message}`);
+  }
+}
+
+function normalizeScorecardChecks(payload) {
+  const rawChecks = Array.isArray(payload?.checks) ? payload.checks : [];
+  return rawChecks.map((check) => {
+    const name = String(check?.name || 'Unknown');
+    const rawScore = Number(check?.score);
+    const score = Number.isFinite(rawScore) ? rawScore : 0;
+    return {
+      name,
+      score,
+      risk: SCORECARD_RISK_BY_CHECK[name] || 'Unknown',
+    };
+  });
+}
+
+function renderScorecardBaselineMarkdown({ repo, score, checks, capturedAt, scorecardVersion, reportDate }) {
+  const rows = checks
+    .map((item) => `| ${item.name} | ${item.score} | ${item.risk} |`)
+    .join('\n');
+
+  return [
+    '# OpenSSF Scorecard Baseline Report',
+    '',
+    `- **Repository:** \`${repo}\``,
+    '- **Source:** generated by `musafety report scorecard`',
+    `- **Captured at:** ${capturedAt}`,
+    `- **Scorecard version:** \`${scorecardVersion}\``,
+    `- **Overall score:** **${score} / 10**`,
+    '',
+    '## Check breakdown',
+    '',
+    '| Check | Score | Risk |',
+    '|---|---:|---|',
+    rows || '| (none) | 0 | Unknown |',
+    '',
+    `## Report date`,
+    '',
+    `- ${reportDate}`,
+    '',
+  ].join('\n');
+}
+
+function renderScorecardRemediationPlanMarkdown({ baselineRelativePath, checks }) {
+  const failing = checks.filter((item) => item.score < 10);
+  const failingRows = failing
+    .sort((a, b) => a.score - b.score || a.name.localeCompare(b.name))
+    .map((item) => `| ${item.name} | ${item.score} | ${item.risk} |`)
+    .join('\n');
+
+  return [
+    '# OpenSSF Scorecard Remediation Plan',
+    '',
+    `Based on baseline report: \`${baselineRelativePath}\`.`,
+    '',
+    '## Failing checks',
+    '',
+    '| Check | Score | Risk |',
+    '|---|---:|---|',
+    (failingRows || '| None | 10 | N/A |'),
+    '',
+    '## Priority order',
+    '',
+    '1. Fix **High** risk checks first (especially score 0 items).',
+    '2. Then close **Medium** risk checks with score < 10.',
+    '3. Finally address **Low** risk ecosystem/process checks.',
+    '',
+    '## Verification loop',
+    '',
+    '1. Run scorecard again.',
+    '2. Re-generate baseline + remediation files.',
+    '3. Compare score deltas and track improved checks.',
+    '',
+  ].join('\n');
 }
 
 function parseBranchList(rawValue) {
@@ -1632,6 +1864,97 @@ function doctor(rawArgs) {
   setExitCodeFromScan(scanResult);
 }
 
+function report(rawArgs) {
+  const options = parseReportArgs(rawArgs);
+  const subcommand = options.subcommand || 'help';
+  if (subcommand === 'help' || subcommand === '--help' || subcommand === '-h') {
+    console.log(
+      `${TOOL_NAME} report commands:\n` +
+      `  ${TOOL_NAME} report scorecard [--target <path>] [--repo github.com/<owner>/<repo>] [--scorecard-json <file>] [--output-dir <path>] [--date YYYY-MM-DD] [--dry-run] [--json]\n` +
+      `\n` +
+      `Examples:\n` +
+      `  ${TOOL_NAME} report scorecard --repo github.com/recodeecom/multiagent-safety\n` +
+      `  ${TOOL_NAME} report scorecard --scorecard-json ./scorecard.json --date 2026-04-10`,
+    );
+    process.exitCode = 0;
+    return;
+  }
+
+  if (subcommand !== 'scorecard') {
+    throw new Error(`Unknown report subcommand: ${subcommand}`);
+  }
+
+  const repoRoot = resolveRepoRoot(options.target);
+  const repo = resolveScorecardRepo(repoRoot, options.repo);
+  const payload = options.scorecardJson
+    ? readScorecardJsonFile(options.scorecardJson)
+    : runScorecardJson(repo);
+
+  const reportDate = options.date || todayDateStamp();
+  const outputDir = path.resolve(options.outputDir || path.join(repoRoot, 'docs', 'reports'));
+  const baselinePath = path.join(outputDir, `openssf-scorecard-baseline-${reportDate}.md`);
+  const remediationPath = path.join(outputDir, `openssf-scorecard-remediation-plan-${reportDate}.md`);
+
+  const checks = normalizeScorecardChecks(payload);
+  const rawScore = Number(payload?.score);
+  const score = Number.isFinite(rawScore) ? rawScore : 0;
+  const capturedAt = String(payload?.date || new Date().toISOString());
+  const scorecardVersion = String(payload?.scorecard?.version || payload?.version || 'unknown');
+
+  const baselineMarkdown = renderScorecardBaselineMarkdown({
+    repo,
+    score,
+    checks,
+    capturedAt,
+    scorecardVersion,
+    reportDate,
+  });
+
+  const remediationMarkdown = renderScorecardRemediationPlanMarkdown({
+    baselineRelativePath: path.relative(repoRoot, baselinePath) || path.basename(baselinePath),
+    checks,
+  });
+
+  if (!options.dryRun) {
+    fs.mkdirSync(outputDir, { recursive: true });
+    fs.writeFileSync(baselinePath, baselineMarkdown, 'utf8');
+    fs.writeFileSync(remediationPath, remediationMarkdown, 'utf8');
+  }
+
+  if (options.json) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          repoRoot,
+          repo,
+          score,
+          checks: checks.length,
+          outputDir,
+          baselinePath,
+          remediationPath,
+          dryRun: Boolean(options.dryRun),
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+    process.exitCode = 0;
+    return;
+  }
+
+  console.log(`[${TOOL_NAME}] Report target: ${repoRoot}`);
+  console.log(`[${TOOL_NAME}] Scorecard repo: ${repo}`);
+  console.log(`[${TOOL_NAME}] Score: ${score}/10`);
+  if (options.dryRun) {
+    console.log(`[${TOOL_NAME}] Dry run report paths:`);
+  } else {
+    console.log(`[${TOOL_NAME}] Generated reports:`);
+  }
+  console.log(`  - ${baselinePath}`);
+  console.log(`  - ${remediationPath}`);
+  process.exitCode = 0;
+}
+
 function setup(rawArgs) {
   const options = parseCommonArgs(rawArgs, {
     target: process.cwd(),
@@ -1750,6 +2073,11 @@ function printAgentsSnippet() {
 
 function copyPrompt() {
   process.stdout.write(AI_SETUP_PROMPT);
+  process.exitCode = 0;
+}
+
+function copyCommands() {
+  process.stdout.write(AI_SETUP_COMMANDS);
   process.exitCode = 0;
 }
 
@@ -2076,8 +2404,18 @@ function main() {
     return;
   }
 
+  if (command === 'report') {
+    report(rest);
+    return;
+  }
+
   if (command === 'copy-prompt') {
     copyPrompt();
+    return;
+  }
+
+  if (command === 'copy-commands') {
+    copyCommands();
     return;
   }
 
