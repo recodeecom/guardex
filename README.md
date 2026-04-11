@@ -239,8 +239,9 @@ Use this exact checklist to setup multi-agent safety in this repository for Code
      start isolated agent branch/worktree -> claim file locks -> implement/verify ->
      finish via PR/merge cleanup with scripts/agent-branch-finish.sh.
    - `scripts/codex-agent.sh` now auto-runs this finish flow after Codex exits:
-     auto-commit changed files -> push/create PR -> merge attempt -> branch/worktree cleanup ->
-     pull local base branch.
+     auto-commit changed files -> push/create PR -> merge attempt -> keep branch/worktree for follow-up.
+   - Remove merged branches when you are done reviewing:
+     gx cleanup --branch "$(git rev-parse --abbrev-ref HEAD)"
 
 5) Optional: create OpenSpec planning workspace:
    bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
@@ -272,9 +273,11 @@ gx protect set <branch...> [--target <path>]
 gx protect reset [--target <path>]
 gx sync --check [--target <path>] [--base <branch>] [--json]
 gx sync [--target <path>] [--base <branch>] [--strategy rebase|merge] [--ff-only]
+gx cleanup [--target <path>] [--base <branch>] [--branch <agent/...>] [--dry-run] [--force-dirty] [--keep-remote]
 gx report scorecard [--target <path>] [--repo github.com/<owner>/<repo>] [--scorecard-json <file>] [--output-dir <path>] [--date YYYY-MM-DD]
-bash scripts/agent-worktree-prune.sh   # manual stale worktree cleanup (auto base detection)
-bash scripts/agent-worktree-prune.sh --force-dirty   # remove stale dirty worktrees too
+bash scripts/agent-worktree-prune.sh   # prune temporary worktrees only (keeps merged agent branches by default)
+bash scripts/agent-worktree-prune.sh --delete-branches --delete-remote-branches   # full merged-branch cleanup
+bash scripts/agent-worktree-prune.sh --force-dirty --delete-branches   # force-remove dirty merged worktrees too
 bash scripts/openspec/init-plan-workspace.sh <plan-slug>   # optional OpenSpec plan scaffold
 ```
 
@@ -291,8 +294,10 @@ and asks `[y/N]` whether to update immediately (default is `N`).
 - `gx doctor` on protected `main` auto-starts an isolated `agent/gx/...-gx-doctor` worktree branch and applies repairs there.
 - `gx setup` and `gx doctor` always refresh `.githooks/pre-commit` from templates, so Codex sub-branch enforcement stays repaired.
 - `scripts/codex-agent.sh` now auto-runs finish automation after a Codex session when `origin` exists:
-  auto-commit changed files, run PR/merge cleanup, and prune merged worktrees.
+  auto-commit changed files, run PR/merge automation, and keep merged agent branches/worktrees by default.
+  It also auto-syncs each sandbox branch against the latest base branch before task execution.
   If conflicts remain, it keeps the sandbox and prompts for a conflict-resolution review pass.
+- use `gx cleanup` (or `gx cleanup --branch <agent/...>`) to remove merged branches/worktrees when done.
 
 ## Advanced commands
 

@@ -5,9 +5,26 @@ BASE_BRANCH=""
 BASE_BRANCH_EXPLICIT=0
 SOURCE_BRANCH=""
 PUSH_ENABLED=1
-DELETE_REMOTE_BRANCH=1
+DELETE_REMOTE_BRANCH=0
+DELETE_REMOTE_BRANCH_EXPLICIT=0
 MERGE_MODE="auto"
 GH_BIN="${MUSAFETY_GH_BIN:-gh}"
+CLEANUP_AFTER_MERGE_RAW="${MUSAFETY_FINISH_CLEANUP:-false}"
+
+normalize_bool() {
+  local raw="${1:-}"
+  local fallback="${2:-0}"
+  local lowered
+  lowered="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    1|true|yes|on) printf '1' ;;
+    0|false|no|off) printf '0' ;;
+    '') printf '%s' "$fallback" ;;
+    *) printf '%s' "$fallback" ;;
+  esac
+}
+
+CLEANUP_AFTER_MERGE="$(normalize_bool "$CLEANUP_AFTER_MERGE_RAW" "0")"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -26,6 +43,20 @@ while [[ $# -gt 0 ]]; do
       ;;
     --keep-remote-branch)
       DELETE_REMOTE_BRANCH=0
+      DELETE_REMOTE_BRANCH_EXPLICIT=1
+      shift
+      ;;
+    --delete-remote-branch)
+      DELETE_REMOTE_BRANCH=1
+      DELETE_REMOTE_BRANCH_EXPLICIT=1
+      shift
+      ;;
+    --cleanup)
+      CLEANUP_AFTER_MERGE=1
+      shift
+      ;;
+    --no-cleanup)
+      CLEANUP_AFTER_MERGE=0
       shift
       ;;
     --mode)
@@ -42,11 +73,15 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "[agent-branch-finish] Unknown argument: $1" >&2
-      echo "Usage: $0 [--base <branch>] [--branch <branch>] [--no-push] [--keep-remote-branch] [--mode auto|direct|pr|--via-pr|--direct-only]" >&2
+      echo "Usage: $0 [--base <branch>] [--branch <branch>] [--no-push] [--cleanup|--no-cleanup] [--keep-remote-branch|--delete-remote-branch] [--mode auto|direct|pr|--via-pr|--direct-only]" >&2
       exit 1
       ;;
   esac
 done
+
+if [[ "$CLEANUP_AFTER_MERGE" -eq 1 && "$DELETE_REMOTE_BRANCH_EXPLICIT" -eq 0 ]]; then
+  DELETE_REMOTE_BRANCH=1
+fi
 
 case "$MERGE_MODE" in
   auto|direct|pr) ;;
@@ -347,43 +382,58 @@ if [[ -x "${repo_root}/scripts/agent-file-locks.py" ]]; then
   python3 "${repo_root}/scripts/agent-file-locks.py" release --branch "$SOURCE_BRANCH" >/dev/null 2>&1 || true
 fi
 
-if [[ "$source_worktree" == "$repo_root" ]]; then
-  if is_clean_worktree "$source_worktree"; then
-    git -C "$source_worktree" checkout "$BASE_BRANCH" >/dev/null 2>&1 || true
-    if [[ "$PUSH_ENABLED" -eq 1 ]] && git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
-      git -C "$source_worktree" pull --ff-only origin "$BASE_BRANCH" >/dev/null 2>&1 || true
-    fi
-  fi
-elif [[ "$source_worktree" == "$current_worktree" && "$source_worktree" == "${repo_root}/.omx/agent-worktrees"/* ]]; then
-  git -C "$source_worktree" checkout --detach >/dev/null 2>&1 || true
-fi
-
-if [[ "$source_worktree" != "$current_worktree" && "$source_worktree" == "${repo_root}/.omx/agent-worktrees"/* ]]; then
-  git -C "$repo_root" worktree remove "$source_worktree" --force >/dev/null 2>&1 || true
-fi
-
-git -C "$repo_root" branch -d "$SOURCE_BRANCH"
-
-if [[ "$PUSH_ENABLED" -eq 1 && "$DELETE_REMOTE_BRANCH" -eq 1 ]]; then
-  if git -C "$repo_root" ls-remote --exit-code --heads origin "$SOURCE_BRANCH" >/dev/null 2>&1; then
-    git -C "$repo_root" push origin --delete "$SOURCE_BRANCH"
-  fi
-fi
-
 base_worktree="$(get_worktree_for_branch "$BASE_BRANCH")"
 if [[ -n "$base_worktree" ]] && is_clean_worktree "$base_worktree" && [[ "$PUSH_ENABLED" -eq 1 ]]; then
   git -C "$base_worktree" pull --ff-only origin "$BASE_BRANCH" >/dev/null 2>&1 || true
 fi
 
-if [[ -x "${repo_root}/scripts/agent-worktree-prune.sh" ]]; then
-  if ! bash "${repo_root}/scripts/agent-worktree-prune.sh" --base "$BASE_BRANCH"; then
-    echo "[agent-branch-finish] Warning: automatic worktree prune failed." >&2
-    echo "[agent-branch-finish] You can run manual cleanup: bash scripts/agent-worktree-prune.sh --base ${BASE_BRANCH}" >&2
+if [[ "$CLEANUP_AFTER_MERGE" -eq 1 ]]; then
+  if [[ "$source_worktree" == "$repo_root" ]]; then
+    if is_clean_worktree "$source_worktree"; then
+      git -C "$source_worktree" checkout "$BASE_BRANCH" >/dev/null 2>&1 || true
+      if [[ "$PUSH_ENABLED" -eq 1 ]] && git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
+        git -C "$source_worktree" pull --ff-only origin "$BASE_BRANCH" >/dev/null 2>&1 || true
+      fi
+    fi
+  elif [[ "$source_worktree" == "$current_worktree" && "$source_worktree" == "${repo_root}/.omx/agent-worktrees"/* ]]; then
+    git -C "$source_worktree" checkout --detach >/dev/null 2>&1 || true
   fi
-fi
 
-echo "[agent-branch-finish] Merged '${SOURCE_BRANCH}' into '${BASE_BRANCH}' via ${merge_status} flow and removed branch."
-if [[ "$source_worktree" == "$current_worktree" && "$source_worktree" == "${repo_root}/.omx/agent-worktrees"/* ]]; then
-  echo "[agent-branch-finish] Current worktree '${source_worktree}' still exists because it is the active shell cwd." >&2
-  echo "[agent-branch-finish] Leave this directory, then run: bash scripts/agent-worktree-prune.sh --base ${BASE_BRANCH}" >&2
+  if [[ "$source_worktree" != "$current_worktree" && "$source_worktree" == "${repo_root}/.omx/agent-worktrees"/* ]]; then
+    git -C "$repo_root" worktree remove "$source_worktree" --force >/dev/null 2>&1 || true
+  fi
+
+  git -C "$repo_root" branch -d "$SOURCE_BRANCH"
+
+  if [[ "$PUSH_ENABLED" -eq 1 && "$DELETE_REMOTE_BRANCH" -eq 1 ]]; then
+    if git -C "$repo_root" ls-remote --exit-code --heads origin "$SOURCE_BRANCH" >/dev/null 2>&1; then
+      git -C "$repo_root" push origin --delete "$SOURCE_BRANCH"
+    fi
+  fi
+
+  if [[ -x "${repo_root}/scripts/agent-worktree-prune.sh" ]]; then
+    prune_args=(--base "$BASE_BRANCH" --delete-branches)
+    if [[ "$DELETE_REMOTE_BRANCH" -eq 1 ]]; then
+      prune_args+=(--delete-remote-branches)
+    fi
+    if ! bash "${repo_root}/scripts/agent-worktree-prune.sh" "${prune_args[@]}"; then
+      echo "[agent-branch-finish] Warning: automatic worktree prune failed." >&2
+      echo "[agent-branch-finish] You can run manual cleanup: bash scripts/agent-worktree-prune.sh --base ${BASE_BRANCH} --delete-branches" >&2
+    fi
+  fi
+
+  echo "[agent-branch-finish] Merged '${SOURCE_BRANCH}' into '${BASE_BRANCH}' via ${merge_status} flow and cleaned source branch/worktree."
+  if [[ "$source_worktree" == "$current_worktree" && "$source_worktree" == "${repo_root}/.omx/agent-worktrees"/* ]]; then
+    echo "[agent-branch-finish] Current worktree '${source_worktree}' still exists because it is the active shell cwd." >&2
+    echo "[agent-branch-finish] Leave this directory, then run: bash scripts/agent-worktree-prune.sh --base ${BASE_BRANCH} --delete-branches" >&2
+  fi
+else
+  if [[ -x "${repo_root}/scripts/agent-worktree-prune.sh" ]]; then
+    if ! bash "${repo_root}/scripts/agent-worktree-prune.sh" --base "$BASE_BRANCH"; then
+      echo "[agent-branch-finish] Warning: temporary worktree prune failed." >&2
+    fi
+  fi
+
+  echo "[agent-branch-finish] Merged '${SOURCE_BRANCH}' into '${BASE_BRANCH}' via ${merge_status} flow and kept source branch/worktree."
+  echo "[agent-branch-finish] Cleanup later with: bash scripts/agent-worktree-prune.sh --base ${BASE_BRANCH} --delete-branches --delete-remote-branches"
 fi

@@ -216,7 +216,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.equal(packageJson.scripts['agent:branch:sync'], 'gx sync');
   assert.equal(packageJson.scripts['agent:branch:sync:check'], 'gx sync --check');
   assert.equal(packageJson.scripts['agent:safety:setup'], 'gx setup');
-  assert.equal(packageJson.scripts['agent:cleanup'], 'bash ./scripts/agent-worktree-prune.sh');
+  assert.equal(packageJson.scripts['agent:cleanup'], 'gx cleanup');
 
   const agentsContent = fs.readFileSync(path.join(repoDir, 'AGENTS.md'), 'utf8');
   assert.equal(agentsContent.includes('<!-- multiagent-safety:START -->'), true);
@@ -554,7 +554,7 @@ test('agent-branch-finish infers base from source branch metadata and updates ma
   );
 
   const localBranchExists = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${agentBranch}`], repoDir);
-  assert.equal(localBranchExists.status, 1, localBranchExists.stderr || localBranchExists.stdout);
+  assert.equal(localBranchExists.status, 0, localBranchExists.stderr || localBranchExists.stdout);
 });
 
 test('default invocation runs non-mutating status output', () => {
@@ -743,7 +743,7 @@ test('pre-commit blocks protected branch commits even from VS Code Source Contro
   assert.match(hookResult.stderr, /Direct commits on protected branches are blocked/);
 });
 
-test('codex-agent launches codex inside a fresh sandbox worktree and auto-prunes clean branches on exit', () => {
+test('codex-agent launches codex inside a fresh sandbox worktree and keeps branch/worktree by default', () => {
   const repoDir = initRepo();
   seedCommit(repoDir);
 
@@ -782,7 +782,7 @@ test('codex-agent launches codex inside a fresh sandbox worktree and auto-prunes
   assert.equal(launch.status, 0, launch.stderr || launch.stdout);
   assert.match(launch.stdout, /\[codex-agent\] Launching codex in sandbox:/);
   assert.match(launch.stdout, /\[codex-agent\] Session ended \(exit=0\)\. Running worktree cleanup\.\.\./);
-  assert.match(launch.stdout, /\[codex-agent\] Auto-cleaned sandbox worktree:/);
+  assert.match(launch.stdout, /\[codex-agent\] Sandbox worktree kept:/);
 
   const launchedCwd = fs.readFileSync(cwdMarker, 'utf8').trim();
   assert.match(
@@ -793,10 +793,10 @@ test('codex-agent launches codex inside a fresh sandbox worktree and auto-prunes
   const launchedArgs = fs.readFileSync(argsMarker, 'utf8').trim();
   assert.match(launchedArgs, /--model gpt-5\.4-mini/);
 
-  assert.equal(fs.existsSync(launchedCwd), false, 'clean codex-agent sandbox should auto-prune on exit');
+  assert.equal(fs.existsSync(launchedCwd), true, 'clean codex-agent sandbox should stay available by default');
   const launchedBranch = extractCreatedBranch(launch.stdout);
   const branchResult = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${launchedBranch}`], repoDir);
-  assert.notEqual(branchResult.status, 0, 'clean auto-pruned branch should be removed locally');
+  assert.equal(branchResult.status, 0, 'agent branch should remain after default codex-agent run');
 });
 
 test('codex-agent supports --codex-bin override before positional arguments', () => {
@@ -845,7 +845,7 @@ test('codex-agent supports --codex-bin override before positional arguments', ()
   );
   assert.equal(launch.status, 0, launch.stderr || launch.stdout);
   assert.match(launch.stdout, /\[codex-agent\] Launching .* in sandbox:/);
-  assert.match(launch.stdout, /\[codex-agent\] Auto-cleaned sandbox worktree:/);
+  assert.match(launch.stdout, /\[codex-agent\] Sandbox worktree kept:/);
 
   const launchedCwd = fs.readFileSync(cwdMarker, 'utf8').trim();
   assert.match(
@@ -854,7 +854,7 @@ test('codex-agent supports --codex-bin override before positional arguments', ()
   );
   const launchedArgs = fs.readFileSync(argsMarker, 'utf8').trim();
   assert.match(launchedArgs, /--model gpt-5\.4-mini/);
-  assert.equal(fs.existsSync(launchedCwd), false, 'override invocation should still auto-prune clean sandbox');
+  assert.equal(fs.existsSync(launchedCwd), true, 'override invocation should keep sandbox unless cleanup is requested');
 });
 
 test('codex-agent keeps dirty sandbox worktrees after session exit', () => {
@@ -961,17 +961,17 @@ exit 1
     },
   );
   assert.equal(launch.status, 0, launch.stderr || launch.stdout);
-  assert.match(launch.stdout, /\[codex-agent\] Auto-finish enabled: commit -> push\/PR -> merge -> cleanup\./);
+  assert.match(launch.stdout, /\[codex-agent\] Auto-finish enabled: commit -> push\/PR -> merge \(keep branch\/worktree\)\./);
   assert.match(launch.stdout, /\[codex-agent\] Auto-finish completed for/);
-  assert.match(launch.stdout, /\[codex-agent\] Auto-cleaned sandbox worktree:/);
+  assert.match(launch.stdout, /\[codex-agent\] Sandbox worktree kept:/);
 
   const launchedCwd = fs.readFileSync(cwdMarker, 'utf8').trim();
-  assert.equal(fs.existsSync(launchedCwd), false, 'auto-finished sandbox should be removed');
+  assert.equal(fs.existsSync(launchedCwd), true, 'auto-finished sandbox should stay until explicit cleanup');
   const launchedBranch = extractCreatedBranch(launch.stdout);
   result = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${launchedBranch}`], repoDir);
-  assert.notEqual(result.status, 0, 'auto-finished branch should be removed locally');
+  assert.equal(result.status, 0, 'auto-finished branch should remain locally by default');
   result = runCmd('git', ['ls-remote', '--heads', 'origin', launchedBranch], repoDir);
-  assert.equal(result.stdout.trim(), '', 'auto-finished branch should be removed on origin');
+  assert.match(result.stdout, /refs\/heads\//, 'auto-finished branch should remain on origin by default');
 
   const launchedArgs = fs.readFileSync(argsMarker, 'utf8').trim();
   assert.match(launchedArgs, /--model gpt-5\.4-mini/);
@@ -1157,11 +1157,11 @@ test('agent-branch-finish auto-syncs source branch when behind origin/dev', () =
   assert.match(finish.stderr, /Auto-sync complete \(behind now: 0\)/);
   assert.match(
     finish.stdout,
-    /Merged 'agent\/test-finish-sync-guard' into 'dev' via direct flow and removed branch\./,
+    /Merged 'agent\/test-finish-sync-guard' into 'dev' via direct flow and kept source branch\/worktree\./,
   );
 
   result = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-finish-sync-guard'], repoDir);
-  assert.notEqual(result.status, 0, 'agent branch should be deleted locally after finish');
+  assert.equal(result.status, 0, 'agent branch should stay locally after finish by default');
 });
 
 test('agent-branch-finish pr mode continues cleanup when gh merge only fails local branch deletion', () => {
@@ -1207,7 +1207,7 @@ exit 1
 
   const finish = runCmd(
     'bash',
-    ['scripts/agent-branch-finish.sh', '--branch', 'agent/test-pr-delete-error', '--mode', 'pr'],
+    ['scripts/agent-branch-finish.sh', '--branch', 'agent/test-pr-delete-error', '--mode', 'pr', '--cleanup'],
     repoDir,
     { MUSAFETY_GH_BIN: fakeGhPath },
   );
@@ -1218,7 +1218,7 @@ exit 1
   );
   assert.match(
     finish.stdout,
-    /Merged 'agent\/test-pr-delete-error' into 'dev' via pr flow and removed branch\./,
+    /Merged 'agent\/test-pr-delete-error' into 'dev' via pr flow and cleaned source branch\/worktree\./,
   );
 
   result = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-pr-delete-error'], repoDir);
@@ -1527,7 +1527,7 @@ exit 1
   assert.equal(args, 'i -g @fission-ai/openspec @imdeadpool/codex-account-switcher');
 });
 
-test('worktree prune removes merged agent worktrees and branches', () => {
+test('worktree prune keeps merged agent worktrees/branches unless delete flags are set', () => {
   const repoDir = initRepo();
   let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -1540,10 +1540,15 @@ test('worktree prune removes merged agent worktrees and branches', () => {
 
   result = runCmd('bash', ['scripts/agent-worktree-prune.sh'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.equal(fs.existsSync(worktreePath), false);
 
   const branchResult = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-prune'], repoDir);
-  assert.notEqual(branchResult.status, 0, 'merged agent branch should be removed by prune');
+  assert.equal(branchResult.status, 0, 'merged agent branch should remain by default');
+
+  result = runCmd('bash', ['scripts/agent-worktree-prune.sh', '--delete-branches'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(worktreePath), false);
+  const branchAfterDelete = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-prune'], repoDir);
+  assert.notEqual(branchAfterDelete.status, 0, 'merged agent branch should be removed when delete flag is set');
 });
 
 test('worktree prune preserves dirty agent worktrees unless --force-dirty is used', () => {
@@ -1558,14 +1563,45 @@ test('worktree prune preserves dirty agent worktrees unless --force-dirty is use
 
   fs.writeFileSync(path.join(worktreePath, 'dirty.txt'), 'dirty\n', 'utf8');
 
-  result = runCmd('bash', ['scripts/agent-worktree-prune.sh'], repoDir);
+  result = runCmd('bash', ['scripts/agent-worktree-prune.sh', '--delete-branches'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
-  assert.match(result.stdout, /skipped_dirty=1/);
   assert.equal(fs.existsSync(worktreePath), true, 'dirty worktree should remain without --force-dirty');
 
-  result = runCmd('bash', ['scripts/agent-worktree-prune.sh', '--force-dirty'], repoDir);
+  result = runCmd('bash', ['scripts/agent-worktree-prune.sh', '--force-dirty', '--delete-branches'], repoDir);
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.equal(fs.existsSync(worktreePath), false, 'dirty worktree should be removable with --force-dirty');
+});
+
+test('cleanup command removes merged agent branch/worktree and remote ref', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+  attachOriginRemote(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply gx setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['push', 'origin', 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const worktreePath = path.join(repoDir, '.omx', 'agent-worktrees', 'agent__cleanup-branch');
+  result = runCmd('git', ['worktree', 'add', '-b', 'agent/test-cleanup', worktreePath, 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['-C', worktreePath, 'push', '-u', 'origin', 'agent/test-cleanup'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runNode(['cleanup', '--target', repoDir, '--branch', 'agent/test-cleanup'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const localBranch = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-cleanup'], repoDir);
+  assert.notEqual(localBranch.status, 0, 'cleanup should remove local branch');
+  const remoteBranch = runCmd('git', ['ls-remote', '--heads', 'origin', 'agent/test-cleanup'], repoDir);
+  assert.equal(remoteBranch.stdout.trim(), '', 'cleanup should remove remote branch');
+  assert.equal(fs.existsSync(worktreePath), false, 'cleanup should remove worktree');
 });
 
 test('release fails outside the maintainer repo path', () => {

@@ -5,6 +5,9 @@ BASE_BRANCH="${MUSAFETY_BASE_BRANCH:-}"
 BASE_BRANCH_EXPLICIT=0
 DRY_RUN=0
 FORCE_DIRTY=0
+DELETE_BRANCHES=0
+DELETE_REMOTE_BRANCHES=0
+TARGET_BRANCH=""
 
 if [[ -n "$BASE_BRANCH" ]]; then
   BASE_BRANCH_EXPLICIT=1
@@ -25,9 +28,21 @@ while [[ $# -gt 0 ]]; do
       FORCE_DIRTY=1
       shift
       ;;
+    --delete-branches)
+      DELETE_BRANCHES=1
+      shift
+      ;;
+    --delete-remote-branches)
+      DELETE_REMOTE_BRANCHES=1
+      shift
+      ;;
+    --branch)
+      TARGET_BRANCH="${2:-}"
+      shift 2
+      ;;
     *)
       echo "[agent-worktree-prune] Unknown argument: $1" >&2
-      echo "Usage: $0 [--base <branch>] [--dry-run] [--force-dirty]" >&2
+      echo "Usage: $0 [--base <branch>] [--dry-run] [--force-dirty] [--delete-branches] [--delete-remote-branches] [--branch <agent/...>]" >&2
       exit 1
       ;;
   esac
@@ -70,6 +85,11 @@ resolve_base_branch() {
 
 if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 && -z "$BASE_BRANCH" ]]; then
   echo "[agent-worktree-prune] --base requires a non-empty branch name." >&2
+  exit 1
+fi
+
+if [[ -n "$TARGET_BRANCH" && "$TARGET_BRANCH" != agent/* ]]; then
+  echo "[agent-worktree-prune] --branch must reference an agent/* branch: ${TARGET_BRANCH}" >&2
   exit 1
 fi
 
@@ -124,6 +144,10 @@ process_entry() {
     branch="${branch_ref#refs/heads/}"
   fi
 
+  if [[ -n "$TARGET_BRANCH" && "$branch" != "$TARGET_BRANCH" ]]; then
+    return
+  fi
+
   if [[ "$wt" == "$current_pwd" ]]; then
     skipped_active=$((skipped_active + 1))
     echo "[agent-worktree-prune] Skipping active cwd worktree: ${wt}"
@@ -138,7 +162,9 @@ process_entry() {
     remove_reason="missing-branch"
   elif [[ "$branch" == agent/* ]]; then
     if git -C "$repo_root" merge-base --is-ancestor "$branch" "$BASE_BRANCH"; then
-      remove_reason="merged-agent-branch"
+      if [[ "$DELETE_BRANCHES" -eq 1 ]]; then
+        remove_reason="merged-agent-branch"
+      fi
     fi
   elif [[ "$branch" == __agent_integrate_* || "$branch" == __source-probe-* ]]; then
     remove_reason="temporary-worktree"
@@ -163,10 +189,16 @@ process_entry() {
   fi
 
   if git -C "$repo_root" show-ref --verify --quiet "refs/heads/${branch}" && ! branch_has_worktree "$branch"; then
-    if [[ "$branch" == agent/* ]]; then
+    if [[ "$branch" == agent/* && "$DELETE_BRANCHES" -eq 1 ]]; then
       if run_cmd git -C "$repo_root" branch -d "$branch" >/dev/null 2>&1; then
         removed_branches=$((removed_branches + 1))
         echo "[agent-worktree-prune] Deleted merged branch: ${branch}"
+        if [[ "$DELETE_REMOTE_BRANCHES" -eq 1 ]]; then
+          if git -C "$repo_root" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            run_cmd git -C "$repo_root" push origin --delete "$branch" >/dev/null 2>&1 || true
+            echo "[agent-worktree-prune] Deleted merged remote branch: ${branch}"
+          fi
+        fi
       fi
     elif [[ "$branch" == __agent_integrate_* || "$branch" == __source-probe-* ]]; then
       run_cmd git -C "$repo_root" branch -D "$branch" >/dev/null 2>&1 || true
@@ -199,18 +231,29 @@ done < <(git -C "$repo_root" worktree list --porcelain)
 
 process_entry "$current_wt" "$current_branch_ref"
 
-while IFS= read -r branch; do
-  [[ -z "$branch" ]] && continue
-  if branch_has_worktree "$branch"; then
-    continue
-  fi
-  if git -C "$repo_root" merge-base --is-ancestor "$branch" "$BASE_BRANCH"; then
-    if run_cmd git -C "$repo_root" branch -d "$branch" >/dev/null 2>&1; then
-      removed_branches=$((removed_branches + 1))
-      echo "[agent-worktree-prune] Deleted stale merged branch: ${branch}"
+if [[ "$DELETE_BRANCHES" -eq 1 ]]; then
+  while IFS= read -r branch; do
+    [[ -z "$branch" ]] && continue
+    if [[ -n "$TARGET_BRANCH" && "$branch" != "$TARGET_BRANCH" ]]; then
+      continue
     fi
-  fi
-done < <(git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads/agent)
+    if branch_has_worktree "$branch"; then
+      continue
+    fi
+    if git -C "$repo_root" merge-base --is-ancestor "$branch" "$BASE_BRANCH"; then
+      if run_cmd git -C "$repo_root" branch -d "$branch" >/dev/null 2>&1; then
+        removed_branches=$((removed_branches + 1))
+        echo "[agent-worktree-prune] Deleted stale merged branch: ${branch}"
+        if [[ "$DELETE_REMOTE_BRANCHES" -eq 1 ]]; then
+          if git -C "$repo_root" ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            run_cmd git -C "$repo_root" push origin --delete "$branch" >/dev/null 2>&1 || true
+            echo "[agent-worktree-prune] Deleted stale merged remote branch: ${branch}"
+          fi
+        fi
+      fi
+    fi
+  done < <(git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads/agent)
+fi
 
 run_cmd git -C "$repo_root" worktree prune
 

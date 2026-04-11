@@ -58,6 +58,8 @@ const CRITICAL_GUARDRAIL_PATHS = new Set([
   '.githooks/pre-commit',
   'scripts/agent-branch-start.sh',
   'scripts/agent-branch-finish.sh',
+  'scripts/agent-worktree-prune.sh',
+  'scripts/codex-agent.sh',
   'scripts/agent-file-locks.py',
 ]);
 
@@ -88,6 +90,7 @@ const COMMAND_TYPO_ALIASES = new Map([
   ['intsall', 'install'],
   ['docter', 'doctor'],
   ['doctro', 'doctor'],
+  ['cleunup', 'cleanup'],
   ['scna', 'scan'],
 ]);
 const SUGGESTIBLE_COMMANDS = [
@@ -100,6 +103,7 @@ const SUGGESTIBLE_COMMANDS = [
   'copy-commands',
   'protect',
   'sync',
+  'cleanup',
   'release',
   'install',
   'fix',
@@ -118,6 +122,7 @@ const CLI_COMMAND_DESCRIPTIONS = [
   ['copy-commands', 'Print setup checklist as executable commands only'],
   ['protect', 'Manage protected branches (list/add/remove/set/reset)'],
   ['sync', 'Check or sync agent branches with origin/<base>'],
+  ['cleanup', 'Cleanup merged agent branches/worktrees (local + remote)'],
   ['install', 'Install templates/locks/hooks without running full setup (supports --no-gitignore)'],
   ['fix', 'Repair broken or missing guardrail files/config (supports --no-gitignore)'],
   ['scan', 'Report safety issues and exit non-zero on findings'],
@@ -152,6 +157,9 @@ const AI_SETUP_PROMPT = `Use this exact checklist to setup GuardeX (Guardian T-R
    - For every new user message/task, repeat the same cycle:
      start isolated agent branch/worktree -> claim file locks -> implement/verify ->
      finish via PR/merge cleanup with scripts/agent-branch-finish.sh.
+   - Finished branches stay available by default for audit/follow-up.
+     Remove them explicitly when done:
+     gx cleanup --branch "$(git rev-parse --abbrev-ref HEAD)"
 
 5) Optional: create OpenSpec planning workspace:
    bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
@@ -174,6 +182,7 @@ bash scripts/codex-agent.sh "task" "agent-name"
 bash scripts/agent-branch-start.sh "task" "agent-name"
 python3 scripts/agent-file-locks.py claim --branch "$(git rev-parse --abbrev-ref HEAD)" <file...>
 bash scripts/agent-branch-finish.sh --branch "$(git rev-parse --abbrev-ref HEAD)"
+gx cleanup --branch "$(git rev-parse --abbrev-ref HEAD)"
 bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
 gx protect add release staging
 gx sync --check
@@ -290,6 +299,8 @@ NOTES
   - ${TOOL_NAME} setup asks for Y/N approval before global installs
   - In initialized repos, setup/install/fix block in-place writes on protected main by default
   - doctor auto-starts a sandbox agent branch/worktree when run on protected main
+  - agent-branch-finish merges by default and keeps agent branches/worktrees until explicit cleanup
+  - use '${SHORT_TOOL_NAME} cleanup' to remove merged agent branches/worktrees (optionally remote refs too)
   - Legacy command aliases are still supported: ${LEGACY_NAMES.join(', ')}`);
 
   if (outsideGitRepo) {
@@ -506,7 +517,7 @@ function ensurePackageScripts(repoRoot, dryRun) {
     'agent:codex': 'bash ./scripts/codex-agent.sh',
     'agent:branch:start': 'bash ./scripts/agent-branch-start.sh',
     'agent:branch:finish': 'bash ./scripts/agent-branch-finish.sh',
-    'agent:cleanup': 'bash ./scripts/agent-worktree-prune.sh',
+    'agent:cleanup': `${SHORT_TOOL_NAME} cleanup`,
     'agent:hooks:install': 'bash ./scripts/install-agent-git-hooks.sh',
     'agent:locks:claim': 'python3 ./scripts/agent-file-locks.py claim',
     'agent:locks:allow-delete': 'python3 ./scripts/agent-file-locks.py allow-delete',
@@ -1251,6 +1262,63 @@ function parseSyncArgs(rawArgs) {
 
   if (!options.target) {
     throw new Error('--target requires a path value');
+  }
+
+  return options;
+}
+
+function parseCleanupArgs(rawArgs) {
+  const options = {
+    target: process.cwd(),
+    base: '',
+    branch: '',
+    dryRun: false,
+    forceDirty: false,
+    keepRemote: false,
+  };
+
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+    if (arg === '--target') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--target requires a path value');
+      }
+      options.target = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--base') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--base requires a branch value');
+      }
+      options.base = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--branch') {
+      const next = rawArgs[index + 1];
+      if (!next) {
+        throw new Error('--branch requires an agent branch value');
+      }
+      options.branch = next;
+      index += 1;
+      continue;
+    }
+    if (arg === '--dry-run') {
+      options.dryRun = true;
+      continue;
+    }
+    if (arg === '--force-dirty') {
+      options.forceDirty = true;
+      continue;
+    }
+    if (arg === '--keep-remote') {
+      options.keepRemote = true;
+      continue;
+    }
+    throw new Error(`Unknown option: ${arg}`);
   }
 
   return options;
@@ -2284,6 +2352,39 @@ function copyCommands() {
   process.exitCode = 0;
 }
 
+function cleanup(rawArgs) {
+  const options = parseCleanupArgs(rawArgs);
+  const repoRoot = resolveRepoRoot(options.target);
+  const pruneScript = path.join(repoRoot, 'scripts', 'agent-worktree-prune.sh');
+  if (!fs.existsSync(pruneScript)) {
+    throw new Error(`Missing cleanup script: ${pruneScript}. Run '${SHORT_TOOL_NAME} setup' first.`);
+  }
+
+  const args = [pruneScript];
+  if (options.base) {
+    args.push('--base', options.base);
+  }
+  if (options.branch) {
+    args.push('--branch', options.branch);
+  }
+  if (options.forceDirty) {
+    args.push('--force-dirty');
+  }
+  if (options.dryRun) {
+    args.push('--dry-run');
+  }
+  args.push('--delete-branches');
+  if (!options.keepRemote) {
+    args.push('--delete-remote-branches');
+  }
+
+  const runResult = run('bash', args, { cwd: repoRoot, stdio: 'inherit' });
+  if (runResult.status !== 0) {
+    throw new Error('Cleanup command failed');
+  }
+  process.exitCode = 0;
+}
+
 function sync(rawArgs) {
   const options = parseSyncArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
@@ -2629,6 +2730,11 @@ function main() {
 
   if (command === 'sync') {
     sync(rest);
+    return;
+  }
+
+  if (command === 'cleanup') {
+    cleanup(rest);
     return;
   }
 

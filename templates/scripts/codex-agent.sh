@@ -8,6 +8,7 @@ BASE_BRANCH_EXPLICIT=0
 CODEX_BIN="${MUSAFETY_CODEX_BIN:-codex}"
 AUTO_FINISH_RAW="${MUSAFETY_CODEX_AUTO_FINISH:-true}"
 AUTO_REVIEW_ON_CONFLICT_RAW="${MUSAFETY_CODEX_AUTO_REVIEW_ON_CONFLICT:-true}"
+AUTO_CLEANUP_RAW="${MUSAFETY_CODEX_AUTO_CLEANUP:-false}"
 
 normalize_bool() {
   local raw="${1:-}"
@@ -24,6 +25,7 @@ normalize_bool() {
 
 AUTO_FINISH="$(normalize_bool "$AUTO_FINISH_RAW" "1")"
 AUTO_REVIEW_ON_CONFLICT="$(normalize_bool "$AUTO_REVIEW_ON_CONFLICT_RAW" "1")"
+AUTO_CLEANUP="$(normalize_bool "$AUTO_CLEANUP_RAW" "0")"
 
 if [[ -n "$BASE_BRANCH" ]]; then
   BASE_BRANCH_EXPLICIT=1
@@ -62,6 +64,14 @@ while [[ $# -gt 0 ]]; do
       ;;
     --no-auto-review-on-conflict)
       AUTO_REVIEW_ON_CONFLICT=0
+      shift
+      ;;
+    --cleanup)
+      AUTO_CLEANUP=1
+      shift
+      ;;
+    --no-cleanup)
+      AUTO_CLEANUP=0
       shift
       ;;
     --)
@@ -131,6 +141,75 @@ fi
 
 has_origin_remote() {
   git -C "$repo_root" remote get-url origin >/dev/null 2>&1
+}
+
+resolve_worktree_base_branch() {
+  local wt="$1"
+  if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 && -n "$BASE_BRANCH" ]]; then
+    printf '%s' "$BASE_BRANCH"
+    return 0
+  fi
+
+  local branch
+  branch="$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  if [[ -z "$branch" || "$branch" == "HEAD" ]]; then
+    return 0
+  fi
+
+  local stored_base
+  stored_base="$(git -C "$repo_root" config --get "branch.${branch}.musafetyBase" || true)"
+  if [[ -n "$stored_base" ]]; then
+    printf '%s' "$stored_base"
+    return 0
+  fi
+
+  local configured_base
+  configured_base="$(git -C "$repo_root" config --get multiagent.baseBranch || true)"
+  if [[ -n "$configured_base" ]]; then
+    printf '%s' "$configured_base"
+  fi
+}
+
+sync_worktree_with_base() {
+  local wt="$1"
+  if ! has_origin_remote; then
+    return 0
+  fi
+
+  local base_branch
+  base_branch="$(resolve_worktree_base_branch "$wt")"
+  if [[ -z "$base_branch" ]]; then
+    return 0
+  fi
+
+  if ! git -C "$wt" fetch origin "$base_branch" --quiet; then
+    echo "[codex-agent] Warning: could not fetch origin/${base_branch} before task start." >&2
+    return 0
+  fi
+
+  if ! git -C "$wt" show-ref --verify --quiet "refs/remotes/origin/${base_branch}"; then
+    return 0
+  fi
+
+  local behind_count
+  behind_count="$(git -C "$wt" rev-list --left-right --count "HEAD...origin/${base_branch}" 2>/dev/null | awk '{print $2}')"
+  behind_count="${behind_count:-0}"
+  if [[ "$behind_count" -le 0 ]]; then
+    return 0
+  fi
+
+  local branch
+  branch="$(git -C "$wt" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+  echo "[codex-agent] Task sync: '${branch}' is behind origin/${base_branch} by ${behind_count} commit(s). Rebasing before launch..."
+  if ! git -C "$wt" rebase "origin/${base_branch}"; then
+    echo "[codex-agent] Task sync failed. Resolve and continue in sandbox:" >&2
+    echo "  git -C \"$wt\" rebase --continue" >&2
+    echo "  # or abort" >&2
+    echo "  git -C \"$wt\" rebase --abort" >&2
+    return 1
+  fi
+  echo "[codex-agent] Task sync complete."
+  return 0
 }
 
 worktree_has_changes() {
@@ -224,6 +303,9 @@ run_finish_flow() {
   if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 ]]; then
     finish_args+=(--base "$BASE_BRANCH")
   fi
+  if [[ "$AUTO_CLEANUP" -eq 1 ]]; then
+    finish_args+=(--cleanup)
+  fi
 
   if has_origin_remote; then
     if command -v gh >/dev/null 2>&1 || command -v "${MUSAFETY_GH_BIN:-gh}" >/dev/null 2>&1; then
@@ -268,6 +350,10 @@ run_finish_flow() {
   return 1
 }
 
+if ! sync_worktree_with_base "$worktree_path"; then
+  exit 1
+fi
+
 echo "[codex-agent] Launching ${CODEX_BIN} in sandbox: $worktree_path"
 cd "$worktree_path"
 set +e
@@ -282,7 +368,11 @@ auto_finish_completed=0
 worktree_branch="$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 
 if [[ "$AUTO_FINISH" -eq 1 && -n "$worktree_branch" && "$worktree_branch" != "HEAD" ]]; then
-  echo "[codex-agent] Auto-finish enabled: commit -> push/PR -> merge -> cleanup." 
+  if [[ "$AUTO_CLEANUP" -eq 1 ]]; then
+    echo "[codex-agent] Auto-finish enabled: commit -> push/PR -> merge -> cleanup."
+  else
+    echo "[codex-agent] Auto-finish enabled: commit -> push/PR -> merge (keep branch/worktree)."
+  fi
   if auto_commit_worktree_changes "$worktree_path" "$worktree_branch"; then
     if run_finish_flow "$worktree_path" "$worktree_branch"; then
       auto_finish_completed=1
@@ -311,6 +401,9 @@ if [[ -x "${repo_root}/scripts/agent-worktree-prune.sh" ]]; then
   if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 ]]; then
     prune_args+=(--base "$BASE_BRANCH")
   fi
+  if [[ "$AUTO_CLEANUP" -eq 1 ]]; then
+    prune_args+=(--delete-branches --delete-remote-branches)
+  fi
   if ! bash "${repo_root}/scripts/agent-worktree-prune.sh" "${prune_args[@]}"; then
     echo "[codex-agent] Warning: automatic worktree cleanup failed." >&2
   fi
@@ -321,8 +414,13 @@ if [[ ! -d "$worktree_path" ]]; then
 else
   worktree_branch="$(git -C "$worktree_path" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   echo "[codex-agent] Sandbox worktree kept: $worktree_path"
-  if [[ "$auto_finish_completed" -eq 0 && -n "$worktree_branch" && "$worktree_branch" != "HEAD" ]]; then
-    echo "[codex-agent] If finished, merge + clean with: bash scripts/agent-branch-finish.sh --branch \"${worktree_branch}\" --via-pr"
+  if [[ -n "$worktree_branch" && "$worktree_branch" != "HEAD" ]]; then
+    if [[ "$auto_finish_completed" -eq 1 ]]; then
+      echo "[codex-agent] Branch kept intentionally. Cleanup on demand: gx cleanup --branch \"${worktree_branch}\""
+    else
+      echo "[codex-agent] If finished, merge with: bash scripts/agent-branch-finish.sh --branch \"${worktree_branch}\" --via-pr"
+      echo "[codex-agent] Cleanup on demand: gx cleanup --branch \"${worktree_branch}\""
+    fi
   fi
 fi
 
