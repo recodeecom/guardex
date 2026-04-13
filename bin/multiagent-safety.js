@@ -83,6 +83,7 @@ const AGENTS_MARKER_END = '<!-- multiagent-safety:END -->';
 const GITIGNORE_MARKER_START = '# multiagent-safety:START';
 const GITIGNORE_MARKER_END = '# multiagent-safety:END';
 const MANAGED_GITIGNORE_PATHS = [
+  '.omx/',
   'scripts/agent-branch-start.sh',
   'scripts/agent-branch-finish.sh',
   'scripts/codex-agent.sh',
@@ -98,6 +99,17 @@ const MANAGED_GITIGNORE_PATHS = [
   '.claude/commands/guardex.md',
   LOCK_FILE_RELATIVE,
 ];
+const OMX_SCAFFOLD_DIRECTORIES = [
+  '.omx',
+  '.omx/state',
+  '.omx/logs',
+  '.omx/plans',
+  '.omx/agent-worktrees',
+];
+const OMX_SCAFFOLD_FILES = new Map([
+  ['.omx/notepad.md', '\n\n## WORKING MEMORY\n'],
+  ['.omx/project-memory.json', '{}\n'],
+]);
 const COMMAND_TYPO_ALIASES = new Map([
   ['relaese', 'release'],
   ['realaese', 'release'],
@@ -502,6 +514,45 @@ function lockFilePath(repoRoot) {
   return path.join(repoRoot, LOCK_FILE_RELATIVE);
 }
 
+function ensureOmxScaffold(repoRoot, dryRun) {
+  const operations = [];
+
+  for (const relativeDir of OMX_SCAFFOLD_DIRECTORIES) {
+    const absoluteDir = path.join(repoRoot, relativeDir);
+    if (fs.existsSync(absoluteDir)) {
+      if (!fs.statSync(absoluteDir).isDirectory()) {
+        throw new Error(`Expected directory at ${relativeDir} but found a file.`);
+      }
+      operations.push({ status: 'unchanged', file: relativeDir });
+      continue;
+    }
+
+    if (!dryRun) {
+      fs.mkdirSync(absoluteDir, { recursive: true });
+    }
+    operations.push({ status: 'created', file: relativeDir });
+  }
+
+  for (const [relativeFile, defaultContent] of OMX_SCAFFOLD_FILES.entries()) {
+    const absoluteFile = path.join(repoRoot, relativeFile);
+    if (fs.existsSync(absoluteFile)) {
+      if (!fs.statSync(absoluteFile).isFile()) {
+        throw new Error(`Expected file at ${relativeFile} but found a directory.`);
+      }
+      operations.push({ status: 'unchanged', file: relativeFile });
+      continue;
+    }
+
+    if (!dryRun) {
+      fs.mkdirSync(path.dirname(absoluteFile), { recursive: true });
+      fs.writeFileSync(absoluteFile, defaultContent, 'utf8');
+    }
+    operations.push({ status: 'created', file: relativeFile });
+  }
+
+  return operations;
+}
+
 function ensureLockRegistry(repoRoot, dryRun) {
   const absolutePath = lockFilePath(repoRoot);
   if (fs.existsSync(absolutePath)) {
@@ -844,6 +895,33 @@ function isSpawnFailure(result) {
   return Boolean(result?.error) && typeof result?.status !== 'number';
 }
 
+function ensureRepoBranch(repoRoot, branch) {
+  const current = currentBranchName(repoRoot);
+  if (current === branch) {
+    return { ok: true, changed: false };
+  }
+
+  const checkoutResult = run('git', ['-C', repoRoot, 'checkout', branch], { timeout: 20_000 });
+  if (isSpawnFailure(checkoutResult)) {
+    return {
+      ok: false,
+      changed: false,
+      stdout: checkoutResult.stdout || '',
+      stderr: checkoutResult.stderr || '',
+    };
+  }
+  if (checkoutResult.status !== 0) {
+    return {
+      ok: false,
+      changed: false,
+      stdout: checkoutResult.stdout || '',
+      stderr: checkoutResult.stderr || '',
+    };
+  }
+
+  return { ok: true, changed: true };
+}
+
 function doctorSandboxBranchPrefix() {
   const now = new Date();
   const stamp = [
@@ -945,12 +1023,26 @@ function startDoctorSandbox(blocked) {
     throw startResult.error;
   }
   if (startResult.status !== 0) {
-    throw new Error((startResult.stderr || startResult.stdout || 'failed to start doctor sandbox').trim());
+    return startDoctorSandboxFallback(blocked);
   }
 
   const metadata = extractAgentBranchStartMetadata(startResult.stdout);
-  if (!metadata.worktreePath) {
-    throw new Error(`Failed to parse sandbox worktree from agent-branch-start output:\n${startResult.stdout}`);
+  const currentBranch = currentBranchName(blocked.repoRoot);
+  const worktreePath = metadata.worktreePath ? path.resolve(metadata.worktreePath) : '';
+  const repoRootPath = path.resolve(blocked.repoRoot);
+  const hasSafeWorktree = Boolean(worktreePath) && worktreePath !== repoRootPath;
+  const branchChanged = Boolean(currentBranch) && currentBranch !== blocked.branch;
+
+  if (!hasSafeWorktree || branchChanged) {
+    const restoreResult = ensureRepoBranch(blocked.repoRoot, blocked.branch);
+    if (!restoreResult.ok) {
+      const detail = [restoreResult.stderr, restoreResult.stdout].filter(Boolean).join('\n').trim();
+      throw new Error(
+        `doctor sandbox startup switched protected base checkout and could not restore '${blocked.branch}'.` +
+        (detail ? `\n${detail}` : ''),
+      );
+    }
+    return startDoctorSandboxFallback(blocked);
   }
 
   return {
@@ -1197,7 +1289,27 @@ function runDoctorInSandbox(options, blocked) {
     status: 'skipped',
     note: 'sandbox doctor did not complete successfully',
   };
+  let omxScaffoldSyncResult = {
+    status: 'skipped',
+    note: 'sandbox doctor did not complete successfully',
+  };
   if (nestedResult.status === 0) {
+    const omxScaffoldOps = ensureOmxScaffold(blocked.repoRoot, Boolean(options.dryRun));
+    const changedOmxPaths = omxScaffoldOps.filter((operation) => operation.status !== 'unchanged');
+    if (changedOmxPaths.length === 0) {
+      omxScaffoldSyncResult = {
+        status: 'unchanged',
+        note: '.omx scaffold already in sync',
+        operations: omxScaffoldOps,
+      };
+    } else {
+      omxScaffoldSyncResult = {
+        status: options.dryRun ? 'would-sync' : 'synced',
+        note: `${options.dryRun ? 'would sync' : 'synced'} ${changedOmxPaths.length} .omx path(s)`,
+        operations: omxScaffoldOps,
+      };
+    }
+
     if (!options.dryRun) {
       autoCommitResult = autoCommitDoctorSandboxChanges(metadata);
       if (autoCommitResult.status === 'committed') {
@@ -1264,6 +1376,7 @@ function runDoctorInSandbox(options, blocked) {
             JSON.stringify(
               {
                 ...parsed,
+                sandboxOmxScaffoldSync: omxScaffoldSyncResult,
                 sandboxLockSync: lockSyncResult,
                 sandboxAutoCommit: autoCommitResult,
                 sandboxFinish: finishResult,
@@ -1331,6 +1444,16 @@ function runDoctorInSandbox(options, blocked) {
         console.log(`[${TOOL_NAME}] Lock registry already synced in protected branch workspace.`);
       } else {
         console.log(`[${TOOL_NAME}] Lock registry sync skipped: ${lockSyncResult.note}.`);
+      }
+
+      if (omxScaffoldSyncResult.status === 'synced') {
+        console.log(`[${TOOL_NAME}] Synced .omx scaffold back to protected branch workspace.`);
+      } else if (omxScaffoldSyncResult.status === 'unchanged') {
+        console.log(`[${TOOL_NAME}] .omx scaffold already aligned in protected branch workspace.`);
+      } else if (omxScaffoldSyncResult.status === 'would-sync') {
+        console.log(`[${TOOL_NAME}] Dry run: would sync .omx scaffold back to protected branch workspace.`);
+      } else {
+        console.log(`[${TOOL_NAME}] .omx scaffold sync skipped: ${omxScaffoldSyncResult.note}.`);
       }
     }
   }
@@ -2325,6 +2448,8 @@ function runInstallInternal(options) {
   const repoRoot = resolveRepoRoot(options.target);
   const operations = [];
 
+  operations.push(...ensureOmxScaffold(repoRoot, Boolean(options.dryRun)));
+
   for (const templateFile of TEMPLATE_FILES) {
     operations.push(copyTemplateFile(repoRoot, templateFile, Boolean(options.force), Boolean(options.dryRun)));
   }
@@ -2350,6 +2475,8 @@ function runInstallInternal(options) {
 function runFixInternal(options) {
   const repoRoot = resolveRepoRoot(options.target);
   const operations = [];
+
+  operations.push(...ensureOmxScaffold(repoRoot, Boolean(options.dryRun)));
 
   for (const templateFile of TEMPLATE_FILES) {
     operations.push(ensureTemplateFilePresent(repoRoot, templateFile, Boolean(options.dryRun)));
@@ -2404,6 +2531,8 @@ function runScanInternal(options) {
   const findings = [];
 
   const requiredPaths = [
+    ...OMX_SCAFFOLD_DIRECTORIES,
+    ...Array.from(OMX_SCAFFOLD_FILES.keys()),
     ...TEMPLATE_FILES.map((entry) => toDestinationPath(entry)),
     LOCK_FILE_RELATIVE,
   ];
