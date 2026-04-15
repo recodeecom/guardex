@@ -89,7 +89,7 @@ Module._load = function patchedLoad(request, parent, isMain) {
 
     const result = runCmd(
       process.execPath,
-      ['--require', preloadPath, '--test', __filename],
+      ['--require', preloadPath, '-e', `require(${JSON.stringify(__filename)})`],
       path.resolve(__dirname, '..'),
       { MUSAFETY_FUZZING_OPTIONAL_DEP_SELFTEST: '1' },
     );
