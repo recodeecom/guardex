@@ -1857,6 +1857,7 @@ test('post-merge auto-runs cleanup on base branch and skips non-base branches', 
   assert.match(invocations[0], /^cleanup /);
   assert.match(invocations[0], new RegExp(`--target ${escapeRegexLiteral(repoDir)}`));
   assert.match(invocations[0], /--base dev/);
+  assert.match(invocations[0], /--include-pr-merged/);
   assert.match(invocations[0], /--keep-clean-worktrees/);
 
   result = runCmd('git', ['checkout', '-b', 'feature/post-merge-skip'], repoDir);
@@ -3331,6 +3332,52 @@ test('cleanup command keeps unmerged agent branch refs but removes clean agent w
 
   const localBranch = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-cleanup-keep-branch'], repoDir);
   assert.equal(localBranch.status, 0, 'cleanup should keep unmerged local branch');
+});
+
+test('cleanup command can remove squash-merged agent branches via merged PR detection', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const worktreePath = path.join(repoDir, '.omx', 'agent-worktrees', 'agent__cleanup-pr-merged');
+  result = runCmd('git', ['worktree', 'add', '-b', 'agent/test-cleanup-pr-merged', worktreePath, 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  fs.writeFileSync(path.join(worktreePath, 'feature.txt'), 'feature branch commit\n', 'utf8');
+  result = runCmd('git', ['-C', worktreePath, 'add', 'feature.txt'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['-C', worktreePath, 'commit', '-m', 'feature commit'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const { fakePath: fakeGhPath } = createFakeGhScript(
+    'if [[ "$1" == "pr" && "$2" == "list" ]]; then\n' +
+      '  printf \'%s\\n\' "agent/test-cleanup-pr-merged"\n' +
+      '  exit 0\n' +
+      'fi\n' +
+      'exit 1',
+  );
+
+  result = runNodeWithEnv(
+    [
+      'cleanup',
+      '--target',
+      repoDir,
+      '--branch',
+      'agent/test-cleanup-pr-merged',
+      '--keep-remote',
+      '--keep-clean-worktrees',
+      '--include-pr-merged',
+    ],
+    repoDir,
+    { MUSAFETY_GH_BIN: fakeGhPath },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const localBranch = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-cleanup-pr-merged'], repoDir);
+  assert.notEqual(localBranch.status, 0, 'cleanup should remove merged PR local branch');
+  assert.equal(fs.existsSync(worktreePath), false, 'cleanup should remove merged PR worktree');
 });
 
 test('cleanup command watch mode defaults to 10-minute idle threshold and supports one-cycle execution', () => {

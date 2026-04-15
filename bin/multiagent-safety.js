@@ -2404,6 +2404,7 @@ function parseCleanupArgs(rawArgs) {
     forceDirty: false,
     keepRemote: false,
     keepCleanWorktrees: false,
+    includePrMerged: false,
     idleMinutes: 0,
     watch: false,
     intervalSeconds: 60,
@@ -2453,6 +2454,10 @@ function parseCleanupArgs(rawArgs) {
     }
     if (arg === '--keep-clean-worktrees') {
       options.keepCleanWorktrees = true;
+      continue;
+    }
+    if (arg === '--include-pr-merged') {
+      options.includePrMerged = true;
       continue;
     }
     if (arg === '--idle-minutes') {
@@ -4563,6 +4568,9 @@ function cleanup(rawArgs) {
   }
   if (!options.keepCleanWorktrees) {
     args.push('--only-dirty-worktrees');
+  }
+  if (options.includePrMerged) {
+    args.push('--include-pr-merged');
   }
   if (options.idleMinutes > 0) {
     args.push('--idle-minutes', String(options.idleMinutes));

@@ -37,6 +37,7 @@ fi
 "$node_bin" "$cli_path" cleanup \
   --target "$repo_root" \
   --base "$base_branch" \
+  --include-pr-merged \
   --keep-clean-worktrees >/dev/null 2>&1 || true
 
 exit 0
