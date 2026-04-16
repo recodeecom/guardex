@@ -8,6 +8,8 @@ BASE_BRANCH_EXPLICIT=0
 WORKTREE_ROOT_REL=".omx/agent-worktrees"
 OPENSPEC_AUTO_INIT_RAW="${MUSAFETY_OPENSPEC_AUTO_INIT:-false}"
 OPENSPEC_PLAN_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_PLAN_SLUG:-}"
+OPENSPEC_CHANGE_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_CHANGE_SLUG:-}"
+OPENSPEC_CAPABILITY_SLUG_OVERRIDE="${MUSAFETY_OPENSPEC_CAPABILITY_SLUG:-}"
 POSITIONAL_ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -107,6 +109,25 @@ resolve_openspec_plan_slug() {
     return 0
   fi
   sanitize_slug "${branch_name//\//-}" "$task_slug"
+}
+
+resolve_openspec_change_slug() {
+  local branch_name="$1"
+  local task_slug="$2"
+  if [[ -n "$OPENSPEC_CHANGE_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_CHANGE_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "${branch_name//\//-}" "$task_slug"
+}
+
+resolve_openspec_capability_slug() {
+  local task_slug="$1"
+  if [[ -n "$OPENSPEC_CAPABILITY_SLUG_OVERRIDE" ]]; then
+    sanitize_slug "$OPENSPEC_CAPABILITY_SLUG_OVERRIDE" "$task_slug"
+    return 0
+  fi
+  sanitize_slug "$task_slug" "general-behavior"
 }
 
 resolve_active_codex_snapshot_name() {
@@ -250,6 +271,44 @@ initialize_openspec_plan_workspace() {
   echo "[agent-branch-start] OpenSpec plan workspace: ${worktree}/openspec/plan/${plan_slug}"
 }
 
+initialize_openspec_change_workspace() {
+  local repo="$1"
+  local worktree="$2"
+  local change_slug="$3"
+  local capability_slug="$4"
+
+  hydrate_local_helper_in_worktree "$repo" "$worktree" "scripts/openspec/init-change-workspace.sh"
+
+  if [[ "$OPENSPEC_AUTO_INIT" -ne 1 ]]; then
+    return 0
+  fi
+
+  local openspec_script="${worktree}/scripts/openspec/init-change-workspace.sh"
+  if [[ ! -f "$openspec_script" ]]; then
+    echo "[agent-branch-start] OpenSpec change init script is missing in sandbox worktree." >&2
+    echo "[agent-branch-start] Run 'gx setup --target \"$repo\"' to repair templates, then retry." >&2
+    return 1
+  fi
+  if [[ ! -x "$openspec_script" ]]; then
+    chmod +x "$openspec_script" 2>/dev/null || true
+  fi
+
+  local init_output=""
+  if ! init_output="$(
+    cd "$worktree"
+    bash "scripts/openspec/init-change-workspace.sh" "$change_slug" "$capability_slug" 2>&1
+  )"; then
+    printf '%s\n' "$init_output" >&2
+    echo "[agent-branch-start] OpenSpec workspace initialization failed for change '${change_slug}'." >&2
+    return 1
+  fi
+
+  if [[ -n "$init_output" ]]; then
+    printf '%s\n' "$init_output"
+  fi
+  echo "[agent-branch-start] OpenSpec change workspace: ${worktree}/openspec/changes/${change_slug}"
+}
+
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[agent-branch-start] Not inside a git repository." >&2
   exit 1
@@ -312,6 +371,8 @@ worktree_root="${repo_root}/${WORKTREE_ROOT_REL}"
 mkdir -p "$worktree_root"
 worktree_path="${worktree_root}/${branch_name//\//__}"
 openspec_plan_slug="$(resolve_openspec_plan_slug "$branch_name" "$task_slug")"
+openspec_change_slug="$(resolve_openspec_change_slug "$branch_name" "$task_slug")"
+openspec_capability_slug="$(resolve_openspec_capability_slug "$task_slug")"
 
 if [[ -e "$worktree_path" ]]; then
   echo "[agent-branch-start] Worktree path already exists: ${worktree_path}" >&2
@@ -321,28 +382,9 @@ fi
 auto_transfer_stash_ref=""
 auto_transfer_message=""
 auto_transfer_source_branch=""
-auto_transfer_commits=0
-auto_transfer_commit_count=0
-auto_transfer_reset_ref=""
-branch_start_ref="$start_ref"
 current_branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 protected_branches_raw="$(resolve_protected_branches "$repo_root")"
 if [[ -n "$current_branch" && "$current_branch" != "HEAD" ]] && is_protected_branch_name "$current_branch" "$protected_branches_raw"; then
-  if [[ "$current_branch" == "$BASE_BRANCH" ]]; then
-    ahead_count="$(
-      git -C "$repo_root" rev-list --count "${start_ref}..${current_branch}" 2>/dev/null \
-        | tr -d '[:space:]'
-    )"
-    if [[ "$ahead_count" =~ ^[0-9]+$ ]] && [[ "$ahead_count" -gt 0 ]]; then
-      auto_transfer_commits=1
-      auto_transfer_commit_count="$ahead_count"
-      auto_transfer_source_branch="$current_branch"
-      auto_transfer_reset_ref="$start_ref"
-      branch_start_ref="$current_branch"
-      echo "[agent-branch-start] Detected ${ahead_count} local commit(s) on protected branch '${current_branch}'. Moving them to '${branch_name}' and resetting '${current_branch}' to '${start_ref}'."
-    fi
-  fi
-
   if has_local_changes "$repo_root"; then
     auto_transfer_message="musafety-auto-transfer-${timestamp}-${agent_slug}-${task_slug}"
     if git -C "$repo_root" stash push --include-untracked --message "$auto_transfer_message" >/dev/null 2>&1; then
@@ -358,7 +400,7 @@ if [[ -n "$current_branch" && "$current_branch" != "HEAD" ]] && is_protected_bra
   fi
 fi
 
-git -C "$repo_root" worktree add -b "$branch_name" "$worktree_path" "$branch_start_ref"
+git -C "$repo_root" worktree add -b "$branch_name" "$worktree_path" "$start_ref"
 git -C "$repo_root" config "branch.${branch_name}.musafetyBase" "$BASE_BRANCH" >/dev/null 2>&1 || true
 
 if git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${BASE_BRANCH}"; then
@@ -379,27 +421,20 @@ if [[ -n "$auto_transfer_stash_ref" ]]; then
   fi
 fi
 
-if [[ "$auto_transfer_commits" -eq 1 ]]; then
-  if git -C "$repo_root" reset --hard "$auto_transfer_reset_ref" >/dev/null 2>&1; then
-    transfer_label="${auto_transfer_source_branch:-$BASE_BRANCH}"
-    echo "[agent-branch-start] Moved ${auto_transfer_commit_count} local commit(s) from '${transfer_label}' into '${branch_name}'."
-  else
-    echo "[agent-branch-start] Failed to reset protected branch '${auto_transfer_source_branch}' to '${auto_transfer_reset_ref}' after transfer." >&2
-    echo "[agent-branch-start] The commits remain on '${branch_name}'. Resolve manually in '${repo_root}'." >&2
-    exit 1
-  fi
-fi
-
 hydrate_local_helper_in_worktree "$repo_root" "$worktree_path" "scripts/codex-agent.sh"
 hydrate_dependency_dir_symlink_in_worktree "$repo_root" "$worktree_path" "node_modules"
 hydrate_dependency_dir_symlink_in_worktree "$repo_root" "$worktree_path" "apps/frontend/node_modules"
 hydrate_dependency_dir_symlink_in_worktree "$repo_root" "$worktree_path" "apps/backend/node_modules"
+if ! initialize_openspec_change_workspace "$repo_root" "$worktree_path" "$openspec_change_slug" "$openspec_capability_slug"; then
+  exit 1
+fi
 if ! initialize_openspec_plan_workspace "$repo_root" "$worktree_path" "$openspec_plan_slug"; then
   exit 1
 fi
 
 echo "[agent-branch-start] Created branch: ${branch_name}"
 echo "[agent-branch-start] Worktree: ${worktree_path}"
+echo "[agent-branch-start] OpenSpec change: openspec/changes/${openspec_change_slug}"
 echo "[agent-branch-start] OpenSpec plan: openspec/plan/${openspec_plan_slug}"
 echo "[agent-branch-start] Next steps:"
 echo "  cd \"${worktree_path}\""

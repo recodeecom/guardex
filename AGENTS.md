@@ -128,12 +128,13 @@ OMX runtime state typically lives under `.omx/`:
 - Verification commands + results
 - Risks / follow-ups
 
-## OpenSpec Plan Workspace (required for agent sub-branch changes)
+## OpenSpec Workspaces (required for agent sub-branch changes)
 
-OMX Codex execution flows must use OpenSpec. `scripts/codex-agent.sh` bootstraps a
-per-branch plan workspace automatically under:
+OMX Codex execution flows must use OpenSpec. `scripts/codex-agent.sh` bootstraps
+per-branch OpenSpec workspaces automatically:
 
 ```text
+openspec/changes/<agent-branch-slug>/
 openspec/plan/<agent-branch-slug>/
 ```
 
@@ -141,10 +142,21 @@ For manual `scripts/agent-branch-start.sh` usage, enable auto-bootstrap with
 `MUSAFETY_OPENSPEC_AUTO_INIT=true` or scaffold manually before implementation:
 
 ```bash
+bash scripts/openspec/init-change-workspace.sh "<change-slug>" "<capability-slug>"
 bash scripts/openspec/init-plan-workspace.sh "<plan-slug>"
 ```
 
-Expected shape:
+Expected change shape:
+
+```text
+openspec/changes/<change-slug>/
+  .openspec.yaml
+  proposal.md
+  tasks.md
+  specs/<capability-slug>/spec.md
+```
+
+Expected plan shape:
 
 ```text
 openspec/plan/<plan-slug>/
