@@ -9,6 +9,12 @@ if [[ -z "$branch" ]]; then
   exit 0
 fi
 
+git_dir="$(git rev-parse --git-dir 2>/dev/null || true)"
+is_linked_worktree=0
+if [[ -n "$git_dir" && "$git_dir" == *"/worktrees/"* ]]; then
+  is_linked_worktree=1
+fi
+
 if [[ "${ALLOW_COMMIT_ON_PROTECTED_BRANCH:-0}" == "1" ]]; then
   exit 0
 fi
@@ -118,6 +124,21 @@ Temporary bypass (not recommended):
   MUSAFETY_ALLOW_CODEX_ON_NON_AGENT=1 git commit ...
 Disable this rule for a repo (not recommended):
   git config multiagent.codexRequireAgentBranch false
+MSG
+    exit 1
+  fi
+fi
+
+if [[ "$is_codex_session" == "1" && "$branch" == agent/* ]]; then
+  if [[ "$is_linked_worktree" != "1" && "${MUSAFETY_ALLOW_CODEX_ON_PRIMARY_WORKTREE:-0}" != "1" ]]; then
+    cat >&2 <<'MSG'
+[codex-worktree-guard] Codex agent commits are blocked from the primary checkout.
+Use a linked agent worktree for agent/* branches:
+  bash scripts/agent-branch-start.sh "<task-or-plan>" "<agent-name>"
+Then commit from the printed worktree path.
+
+Temporary bypass (not recommended):
+  MUSAFETY_ALLOW_CODEX_ON_PRIMARY_WORKTREE=1 git commit ...
 MSG
     exit 1
   fi
