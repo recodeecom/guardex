@@ -12,6 +12,7 @@ scripts/agent-worktree-prune.sh
 scripts/agent-file-locks.py
 scripts/install-agent-git-hooks.sh
 scripts/openspec/init-plan-workspace.sh
+scripts/openspec/init-change-workspace.sh
 .githooks/pre-commit
 .githooks/pre-push
 .githooks/post-merge

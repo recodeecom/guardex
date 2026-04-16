@@ -9,6 +9,7 @@ const cliPath = path.resolve(__dirname, '..', 'bin', 'multiagent-safety.js');
 const cliVersion = JSON.parse(
   fs.readFileSync(path.resolve(__dirname, '..', 'package.json'), 'utf8'),
 ).version;
+const withPackageJson = true;
 
 function runNode(args, cwd) {
   return cp.spawnSync('node', [cliPath, ...args], {
@@ -196,6 +197,12 @@ function extractOpenSpecPlanSlug(output) {
   return match[1].trim();
 }
 
+function extractOpenSpecChangeSlug(output) {
+  const match = String(output || '').match(/\[agent-branch-start\] OpenSpec change: openspec\/changes\/(.+)/);
+  assert.ok(match, `missing OpenSpec change slug in output: ${output}`);
+  return match[1].trim();
+}
+
 function isPidAlive(pid) {
   if (!Number.isInteger(pid) || pid <= 0) {
     return false;
@@ -271,6 +278,7 @@ test('setup provisions workflow files and repo config', () => {
     'scripts/agent-file-locks.py',
     'scripts/install-agent-git-hooks.sh',
     'scripts/openspec/init-plan-workspace.sh',
+    'scripts/openspec/init-change-workspace.sh',
     '.githooks/pre-commit',
     '.githooks/pre-push',
     '.githooks/post-merge',
@@ -300,6 +308,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.equal(packageJson.scripts['agent:branch:start'], 'bash ./scripts/agent-branch-start.sh');
   assert.equal(packageJson.scripts['agent:finish'], 'gx finish --all');
   assert.equal(packageJson.scripts['agent:plan:init'], 'bash ./scripts/openspec/init-plan-workspace.sh');
+  assert.equal(packageJson.scripts['agent:change:init'], 'bash ./scripts/openspec/init-change-workspace.sh');
   assert.equal(packageJson.scripts['agent:protect:list'], 'gx protect list');
   assert.equal(packageJson.scripts['agent:branch:sync'], 'gx sync');
   assert.equal(packageJson.scripts['agent:branch:sync:check'], 'gx sync --check');
@@ -319,6 +328,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.match(gitignoreContent, /scripts\/codex-agent\.sh/);
   assert.match(gitignoreContent, /scripts\/review-bot-watch\.sh/);
   assert.match(gitignoreContent, /scripts\/agent-file-locks\.py/);
+  assert.match(gitignoreContent, /scripts\/openspec\/init-change-workspace\.sh/);
   assert.match(gitignoreContent, /\.githooks\/pre-commit/);
   assert.match(gitignoreContent, /\.githooks\/pre-push/);
   assert.match(gitignoreContent, /\.githooks\/post-merge/);
@@ -997,11 +1007,38 @@ test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles
   const defaultBranch = extractCreatedBranch(result.stdout);
   const defaultWorktree = extractCreatedWorktree(result.stdout);
   const defaultPlanSlug = extractOpenSpecPlanSlug(result.stdout);
+  const defaultChangeSlug = extractOpenSpecChangeSlug(result.stdout);
   assert.equal(defaultPlanSlug, sanitizeSlug(defaultBranch, 'openspec-default'));
+  assert.equal(defaultChangeSlug, sanitizeSlug(defaultBranch, 'openspec-default'));
   assert.equal(
     fs.existsSync(path.join(defaultWorktree, 'openspec', 'plan', defaultPlanSlug, 'summary.md')),
     true,
     'default branch start should scaffold OpenSpec plan workspace',
+  );
+  assert.equal(
+    fs.existsSync(path.join(defaultWorktree, 'openspec', 'changes', defaultChangeSlug, 'proposal.md')),
+    true,
+    'default branch start should scaffold OpenSpec change proposal',
+  );
+  assert.equal(
+    fs.existsSync(path.join(defaultWorktree, 'openspec', 'changes', defaultChangeSlug, 'tasks.md')),
+    true,
+    'default branch start should scaffold OpenSpec change tasks',
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(
+        defaultWorktree,
+        'openspec',
+        'changes',
+        defaultChangeSlug,
+        'specs',
+        'openspec-default',
+        'spec.md',
+      ),
+    ),
+    true,
+    'default branch start should scaffold OpenSpec change spec',
   );
 
   result = runCmd(
@@ -1013,10 +1050,16 @@ test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const disabledWorktree = extractCreatedWorktree(result.stdout);
   const disabledPlanSlug = extractOpenSpecPlanSlug(result.stdout);
+  const disabledChangeSlug = extractOpenSpecChangeSlug(result.stdout);
   assert.equal(
     fs.existsSync(path.join(disabledWorktree, 'openspec', 'plan', disabledPlanSlug, 'summary.md')),
     false,
     'OpenSpec auto-bootstrap should be skippable via MUSAFETY_OPENSPEC_AUTO_INIT=false',
+  );
+  assert.equal(
+    fs.existsSync(path.join(disabledWorktree, 'openspec', 'changes', disabledChangeSlug, 'proposal.md')),
+    false,
+    'OpenSpec change bootstrap should be skippable via MUSAFETY_OPENSPEC_AUTO_INIT=false',
   );
 });
 
@@ -2030,15 +2073,34 @@ test('codex-agent launches codex inside a fresh sandbox worktree and keeps branc
   assert.match(launchedArgs, /--model gpt-5\.4-mini/);
 
   assert.equal(fs.existsSync(launchedCwd), true, 'clean codex-agent sandbox should stay available by default');
+  assert.match(launch.stdout, /\[codex-agent\] OpenSpec change workspace:/);
   assert.match(launch.stdout, /\[codex-agent\] OpenSpec plan workspace:/);
   const launchedBranch = extractCreatedBranch(launch.stdout);
   const branchResult = runCmd('git', ['show-ref', '--verify', '--quiet', `refs/heads/${launchedBranch}`], repoDir);
   assert.equal(branchResult.status, 0, 'agent branch should remain after default codex-agent run');
   const openspecPlanSlug = sanitizeSlug(launchedBranch, 'launch-task');
+  const openspecChangeSlug = sanitizeSlug(launchedBranch, 'launch-task');
   assert.equal(
     fs.existsSync(path.join(launchedCwd, 'openspec', 'plan', openspecPlanSlug, 'summary.md')),
     true,
     'codex-agent should scaffold OpenSpec plan workspace in sandbox',
+  );
+  assert.equal(
+    fs.existsSync(path.join(launchedCwd, 'openspec', 'changes', openspecChangeSlug, 'proposal.md')),
+    true,
+    'codex-agent should scaffold OpenSpec change proposal in sandbox',
+  );
+  assert.equal(
+    fs.existsSync(path.join(launchedCwd, 'openspec', 'changes', openspecChangeSlug, 'tasks.md')),
+    true,
+    'codex-agent should scaffold OpenSpec change tasks in sandbox',
+  );
+  assert.equal(
+    fs.existsSync(
+      path.join(launchedCwd, 'openspec', 'changes', openspecChangeSlug, 'specs', 'launch-task', 'spec.md'),
+    ),
+    true,
+    'codex-agent should scaffold OpenSpec change spec in sandbox',
   );
 });
 
@@ -2100,13 +2162,20 @@ test('codex-agent restores local branch and falls back to safe worktree start wh
     new RegExp(`${escapeRegexLiteral(repoDir)}/\\.omx/agent-worktrees/agent__planner__`),
   );
   assert.notEqual(launchedCwd, repoDir);
+  assert.match(combinedOutput, /\[codex-agent\] OpenSpec change workspace:/);
   assert.match(combinedOutput, /\[codex-agent\] OpenSpec plan workspace:/);
   const launchedBranch = extractCreatedBranch(combinedOutput);
   const openspecPlanSlug = sanitizeSlug(launchedBranch, 'fallback-task');
+  const openspecChangeSlug = sanitizeSlug(launchedBranch, 'fallback-task');
   assert.equal(
     fs.existsSync(path.join(launchedCwd, 'openspec', 'plan', openspecPlanSlug, 'summary.md')),
     true,
     'fallback sandbox path should still scaffold OpenSpec plan workspace',
+  );
+  assert.equal(
+    fs.existsSync(path.join(launchedCwd, 'openspec', 'changes', openspecChangeSlug, 'proposal.md')),
+    true,
+    'fallback sandbox path should still scaffold OpenSpec change proposal',
   );
 
   const currentBranch = runCmd('git', ['branch', '--show-current'], repoDir);
@@ -2923,6 +2992,28 @@ test('OpenSpec plan workspace scaffold creates expected role/task structure', ()
   assert.match(plannerTasks, /## 2\. Tests/);
   assert.match(plannerTasks, /## 3\. Implementation/);
   assert.match(plannerTasks, /## 4\. Checkpoints/);
+});
+
+test('OpenSpec change workspace scaffold creates proposal/tasks/spec defaults', () => {
+  const repoDir = initRepo();
+
+  const setupResult = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
+
+  const changeSlug = 'change-workspace-smoke';
+  const capabilitySlug = 'runtime-migration';
+  const scaffold = runCmd(
+    'bash',
+    ['scripts/openspec/init-change-workspace.sh', changeSlug, capabilitySlug],
+    repoDir,
+  );
+  assert.equal(scaffold.status, 0, scaffold.stderr || scaffold.stdout);
+
+  const changeDir = path.join(repoDir, 'openspec', 'changes', changeSlug);
+  assert.equal(fs.existsSync(path.join(changeDir, '.openspec.yaml')), true, '.openspec.yaml missing');
+  assert.equal(fs.existsSync(path.join(changeDir, 'proposal.md')), true, 'proposal.md missing');
+  assert.equal(fs.existsSync(path.join(changeDir, 'tasks.md')), true, 'tasks.md missing');
+  assert.equal(fs.existsSync(path.join(changeDir, 'specs', capabilitySlug, 'spec.md')), true, 'spec.md missing');
 });
 
 test('validate blocks unapproved deletions until allow-delete is set', () => {

@@ -48,6 +48,7 @@ const TEMPLATE_FILES = [
   'scripts/agent-file-locks.py',
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
+  'scripts/openspec/init-change-workspace.sh',
   'githooks/pre-commit',
   'githooks/pre-push',
   'githooks/post-merge',
@@ -77,6 +78,8 @@ const REQUIRED_PACKAGE_SCRIPTS = {
   'agent:locks:claim': 'python3 ./scripts/agent-file-locks.py claim',
   'agent:locks:release': 'python3 ./scripts/agent-file-locks.py release',
   'agent:locks:status': 'python3 ./scripts/agent-file-locks.py status',
+  'agent:plan:init': 'bash ./scripts/openspec/init-plan-workspace.sh',
+  'agent:change:init': 'bash ./scripts/openspec/init-change-workspace.sh',
 };
 
 const EXECUTABLE_RELATIVE_PATHS = new Set([
@@ -88,6 +91,7 @@ const EXECUTABLE_RELATIVE_PATHS = new Set([
   'scripts/agent-file-locks.py',
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
+  'scripts/openspec/init-change-workspace.sh',
   '.githooks/pre-commit',
   '.githooks/pre-push',
   '.githooks/post-merge',
@@ -121,6 +125,7 @@ const MANAGED_GITIGNORE_PATHS = [
   'scripts/agent-file-locks.py',
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
+  'scripts/openspec/init-change-workspace.sh',
   '.githooks/pre-commit',
   '.githooks/pre-push',
   '.githooks/post-merge',
@@ -711,6 +716,7 @@ function ensurePackageScripts(repoRoot, dryRun) {
     'agent:locks:release': 'python3 ./scripts/agent-file-locks.py release',
     'agent:locks:status': 'python3 ./scripts/agent-file-locks.py status',
     'agent:plan:init': 'bash ./scripts/openspec/init-plan-workspace.sh',
+    'agent:change:init': 'bash ./scripts/openspec/init-change-workspace.sh',
     'agent:protect:list': `${SHORT_TOOL_NAME} protect list`,
     'agent:branch:sync': `${SHORT_TOOL_NAME} sync`,
     'agent:branch:sync:check': `${SHORT_TOOL_NAME} sync --check`,

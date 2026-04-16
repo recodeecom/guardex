@@ -62,6 +62,7 @@ test('security workflows are present and use pinned GitHub Actions SHAs', () => 
 test('critical runtime helper scripts stay in sync with templates', () => {
   const pairs = [
     ['templates/scripts/codex-agent.sh', 'scripts/codex-agent.sh'],
+    ['templates/scripts/openspec/init-change-workspace.sh', 'scripts/openspec/init-change-workspace.sh'],
   ];
 
   for (const [templatePath, runtimePath] of pairs) {
