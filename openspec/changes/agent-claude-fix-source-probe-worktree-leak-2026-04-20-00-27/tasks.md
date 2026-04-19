@@ -13,3 +13,9 @@
 - [x] 3.1 `bash -n templates/scripts/agent-branch-finish.sh` (syntax OK).
 - [x] 3.2 `node --test test/*.test.js` — no new regressions (18 pre-existing failures on `main`, same count after patch).
 - [ ] 3.3 Post-merge: user runs `npm publish` to ship 7.0.2.
+
+## 4. Cleanup
+
+- [x] 4.1 Run `scripts/agent-branch-finish.sh --branch agent/claude/fix-source-probe-worktree-leak-2026-04-20-00-27 --base main --via-pr --wait-for-merge --cleanup`.
+- [ ] 4.2 Record PR URL + final `MERGED` state in the completion handoff.
+- [ ] 4.3 Confirm sandbox worktree is removed (`git worktree list` shows no entry; `git branch -a` shows no surviving refs).
