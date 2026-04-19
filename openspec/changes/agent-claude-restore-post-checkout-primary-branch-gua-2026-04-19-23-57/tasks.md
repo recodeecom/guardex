@@ -26,8 +26,8 @@
   is empty (byte-for-byte match with v6.1.0 source).
 - [x] 3.3 `grep -cE "'githooks/post-checkout'|'\.githooks/post-checkout'" bin/multiagent-safety.js`
   returns `4`.
-- [ ] 3.4 Run `openspec validate agent-claude-restore-post-checkout-primary-branch-gua-2026-04-19-23-57 --type change --strict`.
-- [ ] 3.5 Run `openspec validate --specs`.
+- [x] 3.4 Run `openspec validate agent-claude-restore-post-checkout-primary-branch-gua-2026-04-19-23-57 --type change --strict` — valid.
+- [x] 3.5 Run `openspec validate --specs` — no main specs to validate (passes).
 
 ## 4. Cleanup (mandatory; run before claiming completion)
 
