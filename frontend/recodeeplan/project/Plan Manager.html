@@ -1,0 +1,1377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Plan · Project Execution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0D12;
+    --bg-elev: #10141B;
+    --surface: #151A23;
+    --surface-2: #1B212C;
+    --surface-3: #232A37;
+    --border: #242C3A;
+    --border-strong: #323B4D;
+    --text: #E6EAF2;
+    --text-dim: #9AA3B4;
+    --text-muted: #646D80;
+    --accent: #3DDC97;
+    --accent-dim: #1F8A5C;
+    --accent-bg: rgba(61, 220, 151, 0.08);
+    --warn: #F5B544;
+    --danger: #EF6F6F;
+    --info: #7AA2FF;
+    --radius: 10px;
+    --radius-sm: 6px;
+    --radius-lg: 14px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ========== APP SHELL ========== */
+  .app {
+    display: grid;
+    grid-template-rows: 56px 1fr 28px;
+    height: 100vh;
+  }
+
+  /* ========== TOP BAR ========== */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand-mark {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+    display: grid; place-items: center;
+    color: #05110B;
+    font-weight: 700;
+    font-size: 13px;
+    box-shadow: 0 0 0 1px rgba(61,220,151,0.3), 0 4px 12px rgba(61,220,151,0.15);
+  }
+  .brand-text {
+    display: flex; flex-direction: column; line-height: 1.1;
+  }
+  .brand-text .t1 { font-weight: 600; font-size: 13px; }
+  .brand-text .t2 { font-size: 11px; color: var(--text-muted); }
+
+  .crumbs {
+    display: flex; align-items: center; gap: 10px;
+    margin-left: 24px;
+    padding-left: 24px;
+    border-left: 1px solid var(--border);
+  }
+  .crumbs .crumb { color: var(--text-dim); font-size: 12px; }
+  .crumbs .crumb.active { color: var(--text); font-weight: 500; }
+  .crumbs .sep { color: var(--text-muted); }
+
+  .topbar-right {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .search {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 6px 10px;
+    width: 260px;
+    color: var(--text-dim);
+    font-size: 12px;
+  }
+  .search input {
+    background: transparent; border: 0; outline: 0;
+    color: var(--text); flex: 1;
+    font-family: inherit; font-size: 12px;
+  }
+  .kbd {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 5px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-muted);
+  }
+  .icon-btn {
+    width: 32px; height: 32px;
+    display: grid; place-items: center;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #2F3B52 0%, #1B2230 100%);
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 600;
+    color: var(--text);
+    border: 1px solid var(--border-strong);
+  }
+
+  /* ========== MAIN LAYOUT ========== */
+  .main {
+    display: grid;
+    grid-template-columns: 280px 1fr 340px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  /* ========== LEFT RAIL ========== */
+  .rail {
+    border-right: 1px solid var(--border);
+    background: var(--bg-elev);
+    display: flex; flex-direction: column;
+    min-height: 0;
+  }
+  .rail-section {
+    padding: 16px 14px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .rail-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .project-selector {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .project-selector:hover { border-color: var(--border-strong); }
+  .project-selector .pill {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    background: var(--surface-3);
+    display: grid; place-items: center;
+    font-weight: 600;
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+  }
+  .project-selector .info { flex: 1; min-width: 0; }
+  .project-selector .name { font-weight: 500; font-size: 13px; }
+  .project-selector .sub { font-size: 11px; color: var(--text-muted); }
+
+  .rail-goals {
+    flex: 1; overflow-y: auto;
+    padding: 12px 8px;
+  }
+  .rail-goals .rail-label { padding: 0 6px; }
+
+  .goal-filter {
+    display: flex;
+    gap: 4px;
+    padding: 0 6px 10px;
+  }
+  .goal-filter .chip {
+    flex: 1;
+    text-align: center;
+    font-size: 11px;
+    padding: 5px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+  }
+  .goal-filter .chip.active {
+    background: var(--surface-2);
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .goal-item {
+    padding: 10px 12px;
+    margin: 2px 0;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    border: 1px solid transparent;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .goal-item:hover { background: var(--surface); }
+  .goal-item.active {
+    background: var(--surface);
+    border-color: var(--border-strong);
+    box-shadow: inset 2px 0 0 var(--accent);
+  }
+  .goal-item .title {
+    font-size: 12.5px;
+    font-weight: 500;
+    display: flex; align-items: center; gap: 6px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .goal-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot.active { background: var(--accent); box-shadow: 0 0 0 3px rgba(61,220,151,0.15); }
+  .dot.pending { background: var(--text-muted); }
+  .dot.done { background: var(--accent-dim); }
+  .dot.blocked { background: var(--warn); }
+
+  .goal-item .meta {
+    display: flex; gap: 8px;
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+  .progress-track {
+    height: 3px;
+    background: var(--surface-3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+
+  /* ========== CENTER CANVAS ========== */
+  .canvas {
+    overflow-y: auto;
+    background: var(--bg);
+    min-height: 0;
+  }
+  .canvas-inner {
+    max-width: 960px;
+    padding: 24px 32px 80px;
+  }
+
+  .goal-header {
+    display: flex; flex-direction: column; gap: 12px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .goal-header .row {
+    display: flex; align-items: flex-start; justify-content: space-between;
+    gap: 16px;
+  }
+  .goal-title {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .goal-sub {
+    color: var(--text-dim);
+    font-size: 13px;
+    max-width: 620px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 500;
+    background: var(--accent-bg);
+    color: var(--accent);
+    border: 1px solid rgba(61,220,151,0.2);
+  }
+  .badge.gray {
+    background: var(--surface-2);
+    color: var(--text-dim);
+    border-color: var(--border);
+  }
+  .badge.warn {
+    background: rgba(245,181,68,0.08);
+    color: var(--warn);
+    border-color: rgba(245,181,68,0.2);
+  }
+  .badge.info {
+    background: rgba(122,162,255,0.08);
+    color: var(--info);
+    border-color: rgba(122,162,255,0.2);
+  }
+
+  .goal-actions {
+    display: flex; gap: 8px;
+    flex-shrink: 0;
+  }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    font-family: inherit;
+  }
+  .btn:hover { background: var(--surface-2); border-color: var(--border-strong); }
+  .btn.primary {
+    background: var(--accent);
+    color: #05110B;
+    border-color: var(--accent);
+  }
+  .btn.primary:hover { background: #53e5a6; border-color: #53e5a6; }
+  .btn svg { width: 13px; height: 13px; }
+
+  /* Progress overview */
+  .overview {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 24px;
+    align-items: center;
+    padding: 20px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 28px;
+  }
+  .ring {
+    position: relative;
+    width: 88px; height: 88px;
+  }
+  .ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring .pct {
+    position: absolute; inset: 0;
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 18px;
+    font-weight: 600;
+  }
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+  }
+  .stat .label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .stat .value {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 20px;
+    font-weight: 600;
+  }
+  .stat .value .unit {
+    font-size: 12px;
+    color: var(--text-dim);
+    font-weight: 400;
+    margin-left: 2px;
+  }
+
+  /* Phase timeline */
+  .timeline-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .h-title {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .h-title .count {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    font-weight: 400;
+    font-size: 12px;
+  }
+
+  .phase-rail {
+    display: flex;
+    gap: 4px;
+    padding: 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 20px;
+    overflow-x: auto;
+  }
+  .phase-node {
+    flex: 1;
+    min-width: 68px;
+    padding: 10px 10px;
+    border-radius: 7px;
+    cursor: pointer;
+    border: 1px solid transparent;
+    background: transparent;
+    display: flex; flex-direction: column; gap: 6px;
+    position: relative;
+  }
+  .phase-node:hover { background: var(--surface-2); }
+  .phase-node.active {
+    background: var(--surface-3);
+    border-color: var(--border-strong);
+  }
+  .phase-node .label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-muted);
+    letter-spacing: 0.04em;
+  }
+  .phase-node .name {
+    font-size: 11.5px;
+    font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .phase-node .tick {
+    height: 3px; border-radius: 2px;
+    background: var(--surface-3);
+    position: relative;
+  }
+  .phase-node .tick::after {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .phase-node.done .tick::after { width: 100%; }
+  .phase-node.active .tick::after { width: 55%; }
+  .phase-node.pending .tick::after { width: 0; }
+  .phase-node.done .label { color: var(--accent); }
+  .phase-node.active .label { color: var(--accent); }
+
+  /* Phase card */
+  .phase-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    margin-bottom: 14px;
+    overflow: hidden;
+    transition: border-color 0.15s ease;
+  }
+  .phase-card:hover { border-color: var(--border-strong); }
+  .phase-card.expanded { border-color: var(--border-strong); }
+
+  .phase-head {
+    padding: 14px 18px;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 16px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .phase-head .num {
+    width: 36px; height: 36px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    display: grid; place-items: center;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-dim);
+    border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .phase-card.done .num {
+    background: rgba(61,220,151,0.1);
+    color: var(--accent);
+    border-color: rgba(61,220,151,0.25);
+  }
+  .phase-card.active .num {
+    background: rgba(61,220,151,0.1);
+    color: var(--accent);
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(61,220,151,0.08);
+  }
+  .phase-head .body { min-width: 0; }
+  .phase-head .phase-meta {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .phase-head .phase-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .phase-head .right {
+    display: flex; align-items: center; gap: 14px;
+    flex-shrink: 0;
+  }
+  .phase-head .checkbar {
+    display: flex; align-items: center; gap: 8px;
+  }
+  .phase-head .checkbar .mini-bar {
+    width: 72px;
+    height: 4px;
+    background: var(--surface-3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .phase-head .checkbar .mini-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+  }
+  .phase-head .checkbar .ct {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .caret {
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
+  }
+  .phase-card.expanded .caret { transform: rotate(90deg); }
+
+  .phase-body {
+    display: none;
+    padding: 0 18px 18px;
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+    margin: 0 0 0 0;
+  }
+  .phase-card.expanded .phase-body { display: block; }
+
+  .phase-desc {
+    color: var(--text-dim);
+    font-size: 12.5px;
+    padding: 0 0 14px;
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: 14px;
+  }
+
+  .check-list { display: flex; flex-direction: column; gap: 2px; }
+  .check-item {
+    display: grid;
+    grid-template-columns: 22px 1fr auto;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    align-items: center;
+  }
+  .check-item:hover { background: var(--surface-2); }
+  .check {
+    width: 16px; height: 16px;
+    border-radius: 5px;
+    border: 1.5px solid var(--border-strong);
+    background: transparent;
+    cursor: pointer;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .check.checked {
+    background: var(--accent);
+    border-color: var(--accent);
+  }
+  .check.checked svg { display: block; color: #05110B; }
+  .check svg { display: none; width: 10px; height: 10px; }
+  .check-item .text {
+    font-size: 12.5px;
+    line-height: 1.45;
+  }
+  .check-item.checked .text { color: var(--text-muted); text-decoration: line-through; }
+  .check-item .tag {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--surface-3);
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .tag.feature { background: rgba(122,162,255,0.1); color: var(--info); }
+  .tag.runtime { background: rgba(61,220,151,0.1); color: var(--accent); }
+  .tag.bugfix { background: rgba(245,181,68,0.1); color: var(--warn); }
+  .tag.data { background: rgba(200,130,255,0.1); color: #c882ff; }
+
+  .phase-actions {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--border);
+  }
+  .add-check {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 5px;
+  }
+  .add-check:hover { background: var(--surface-2); color: var(--text); }
+
+  /* ========== RIGHT PANEL ========== */
+  .sidebar {
+    border-left: 1px solid var(--border);
+    background: var(--bg-elev);
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .side-sec {
+    padding: 18px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .side-h {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+
+  .activity { display: flex; flex-direction: column; gap: 12px; }
+  .activity-item {
+    display: grid;
+    grid-template-columns: 24px 1fr;
+    gap: 10px;
+    font-size: 12px;
+  }
+  .act-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-top: 6px;
+    margin-left: 8px;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(61,220,151,0.15);
+    position: relative;
+  }
+  .act-dot.gray { background: var(--text-muted); box-shadow: none; }
+  .act-dot.warn { background: var(--warn); box-shadow: 0 0 0 3px rgba(245,181,68,0.15); }
+  .activity-item .who { font-weight: 500; }
+  .activity-item .what { color: var(--text-dim); }
+  .activity-item .when { font-size: 10.5px; color: var(--text-muted); margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+
+  .next-up {
+    padding: 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .next-up .label {
+    font-size: 10.5px;
+    text-transform: uppercase;
+    color: var(--accent);
+    font-weight: 600;
+    letter-spacing: 0.06em;
+  }
+  .next-up .task { font-size: 12.5px; font-weight: 500; }
+  .next-up .sub { font-size: 11.5px; color: var(--text-dim); }
+
+  .prompt-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.55;
+    max-height: 160px;
+    overflow: hidden;
+    position: relative;
+  }
+  .prompt-box::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 40px;
+    background: linear-gradient(transparent, var(--surface));
+  }
+  .prompt-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .prompt-actions .btn { flex: 1; justify-content: center; font-size: 11px; padding: 6px 8px; }
+
+  /* ========== FOOTER ========== */
+  .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 20px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-elev);
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .footer .left, .footer .right {
+    display: flex; align-items: center; gap: 18px;
+  }
+  .footer .dot-live {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 0 3px rgba(61,220,151,0.15);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+  }
+
+  /* ========== TWEAKS PANEL ========== */
+  .tweaks {
+    position: fixed;
+    right: 20px;
+    bottom: 60px;
+    width: 280px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.02);
+    padding: 14px;
+    z-index: 100;
+    display: none;
+  }
+  .tweaks.open { display: block; }
+  .tweaks h3 {
+    margin: 0 0 12px; font-size: 12px; font-weight: 600;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .tweak-row {
+    display: flex; flex-direction: column; gap: 6px;
+    margin-bottom: 12px;
+    font-size: 11.5px;
+  }
+  .tweak-row > label {
+    color: var(--text-dim);
+    font-size: 10.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .swatches { display: flex; gap: 6px; }
+  .swatch {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    cursor: pointer;
+    border: 2px solid transparent;
+  }
+  .swatch.active { border-color: var(--text); }
+  .seg { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 2px; }
+  .seg button {
+    flex: 1; padding: 5px 8px;
+    background: transparent;
+    border: 0;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    border-radius: 4px;
+    font-family: inherit;
+  }
+  .seg button.active { background: var(--surface-3); color: var(--text); }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: padding-box; border: 2px solid transparent; }
+
+  /* Icons */
+  .i { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-caret" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- ========== TOP BAR ========== -->
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">P</div>
+      <div class="brand-text">
+        <div class="t1">Plan</div>
+        <div class="t2">Project Execution</div>
+      </div>
+      <div class="crumbs">
+        <span class="crumb mono">recodee</span>
+        <span class="sep">/</span>
+        <span class="crumb active" id="crumb-goal">migrate-multica-runtime-model</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="search">
+        <svg class="i"><use href="#i-search"/></svg>
+        <input placeholder="Search phases, checkpoints, prompts…"/>
+        <span class="kbd">⌘K</span>
+      </div>
+      <button class="icon-btn" id="tweak-btn" title="Tweaks"><svg class="i"><use href="#i-sliders"/></svg></button>
+      <button class="icon-btn"><svg class="i"><use href="#i-bell"/></svg></button>
+      <div class="avatar">NV</div>
+    </div>
+  </header>
+
+  <!-- ========== MAIN ========== -->
+  <div class="main">
+
+    <!-- ===== LEFT RAIL ===== -->
+    <aside class="rail">
+      <div class="rail-section">
+        <div class="rail-label">Project</div>
+        <div class="project-selector">
+          <div class="pill">RC</div>
+          <div class="info">
+            <div class="name">recodee</div>
+            <div class="sub">Active · 9 goals</div>
+          </div>
+          <svg class="i" style="color:var(--text-muted)"><use href="#i-caret"/></svg>
+        </div>
+      </div>
+
+      <div class="rail-goals">
+        <div class="rail-label" style="padding: 0 6px;">
+          <span>Goals</span>
+          <span class="mono" style="color:var(--text-muted); font-weight:400">9</span>
+        </div>
+        <div class="goal-filter">
+          <div class="chip active">All</div>
+          <div class="chip">Active</div>
+          <div class="chip">Done</div>
+        </div>
+        <div id="goal-list"></div>
+      </div>
+    </aside>
+
+    <!-- ===== CENTER CANVAS ===== -->
+    <main class="canvas">
+      <div class="canvas-inner">
+
+        <!-- Goal header -->
+        <div class="goal-header">
+          <div class="row">
+            <div style="min-width:0">
+              <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+                <span class="badge">● In Progress</span>
+                <span class="badge gray">Phase 7 of 11</span>
+                <span class="badge info">Approved for handoff</span>
+              </div>
+              <div class="goal-title" id="goal-title-main">migrate-multica-runtime-model</div>
+              <div class="goal-sub" style="margin-top:6px">
+                Port dashboard usage/account read slices to Rust-owned data paths. Coordinate freeze windows, ownership handoffs, and replay harness validation across 11 phases.
+              </div>
+            </div>
+            <div class="goal-actions">
+              <button class="btn"><svg class="i"><use href="#i-copy"/></svg> Copy exec prompt</button>
+              <button class="btn primary"><svg class="i"><use href="#i-play"/></svg> Run next phase</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Overview -->
+        <div class="overview">
+          <div class="ring">
+            <svg viewBox="0 0 100 100">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--surface-3)" stroke-width="8"/>
+              <circle id="ring-fill" cx="50" cy="50" r="42" fill="none" stroke="var(--accent)"
+                stroke-width="8" stroke-linecap="round"
+                stroke-dasharray="263.9" stroke-dashoffset="121.4"/>
+            </svg>
+            <div class="pct" id="ring-pct">57%</div>
+          </div>
+          <div class="stats-row">
+            <div class="stat">
+              <div class="label">Phases</div>
+              <div class="value">6<span class="unit">/ 11</span></div>
+            </div>
+            <div class="stat">
+              <div class="label">Checkpoints</div>
+              <div class="value">47<span class="unit">/ 82</span></div>
+            </div>
+            <div class="stat">
+              <div class="label">Avg velocity</div>
+              <div class="value">2.3<span class="unit">/wk</span></div>
+            </div>
+            <div class="stat">
+              <div class="label">ETA</div>
+              <div class="value">May 04<span class="unit">2026</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Phase rail -->
+        <div class="timeline-header">
+          <div class="h-title">Phases <span class="count">· 11</span></div>
+          <div style="display:flex; gap:6px;">
+            <button class="btn" id="expand-all">Expand all</button>
+            <button class="btn"><svg class="i"><use href="#i-plus"/></svg> Add phase</button>
+          </div>
+        </div>
+
+        <div class="phase-rail" id="phase-rail"></div>
+
+        <!-- Phase cards -->
+        <div id="phase-cards"></div>
+
+      </div>
+    </main>
+
+    <!-- ===== RIGHT SIDEBAR ===== -->
+    <aside class="sidebar">
+      <div class="side-sec">
+        <div class="side-h">Next up</div>
+        <div class="next-up">
+          <div class="label">● Phase 7 · in progress</div>
+          <div class="task">Port dashboard usage/account read slices to Rust-owned data paths</div>
+          <div class="sub">12 of 21 checkpoints complete · 3 blocked on replay harness</div>
+          <div class="prompt-actions" style="margin-top:4px">
+            <button class="btn primary"><svg class="i"><use href="#i-play"/></svg> Continue</button>
+            <button class="btn"><svg class="i"><use href="#i-copy"/></svg> Prompt</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-sec">
+        <div class="side-h">
+          <span>Starter prompt</span>
+          <span style="text-transform:none; letter-spacing:0; color:var(--text-muted); font-size:10px; font-weight:400" class="mono">phase-07</span>
+        </div>
+        <div class="prompt-box">
+You are continuing work on <span style="color:var(--accent)">migrate-multica-runtime-model</span>.
+
+Phase 7 — Port dashboard usage/account read slices to Rust-owned data paths.
+
+Context:
+- Python read slices currently live in <span style="color:var(--info)">services/dashboard/usage.py</span> and account.py
+- Target Rust owner: <span style="color:var(--info)">crates/multica-dashboard</span>
+- Freeze window active on contract schema v3.1
+
+Preconditions:
+- Phases 1–6 approved for handoff
+- Replay harness landed (phase 4)
+…
+        </div>
+        <div class="prompt-actions">
+          <button class="btn" style="flex:1"><svg class="i"><use href="#i-copy"/></svg> Copy</button>
+          <button class="btn" style="flex:1"><svg class="i"><use href="#i-zap"/></svg> Open in Claude</button>
+        </div>
+      </div>
+
+      <div class="side-sec">
+        <div class="side-h">Activity</div>
+        <div class="activity">
+          <div class="activity-item">
+            <div class="act-dot"></div>
+            <div>
+              <div><span class="who">Viktor</span> <span class="what">checked off </span><span class="mono" style="color:var(--info)">feature · schema-v3-freeze</span></div>
+              <div class="when">14 min ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot"></div>
+            <div>
+              <div><span class="who">Replay harness</span> <span class="what">passed on phase 7 checkpoint 8</span></div>
+              <div class="when">1 hr ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot warn"></div>
+            <div>
+              <div><span class="who">CI</span> <span class="what">flagged drift in </span><span class="mono" style="color:var(--warn)">usage_totals_fast</span></div>
+              <div class="when">3 hr ago</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot gray"></div>
+            <div>
+              <div><span class="who">Viktor</span> <span class="what">approved phase 6 for handoff</span></div>
+              <div class="when">Yesterday · 18:42</div>
+            </div>
+          </div>
+          <div class="activity-item">
+            <div class="act-dot gray"></div>
+            <div>
+              <div><span class="who">Claude</span> <span class="what">drafted starter prompt for phase 8</span></div>
+              <div class="when">Yesterday · 17:05</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ========== FOOTER ========== -->
+  <footer class="footer">
+    <div class="left">
+      <span><span class="dot-live" style="display:inline-block; vertical-align:middle; margin-right:6px"></span>Last sync 01:13:55 PM</span>
+      <span>Routing · Capacity weighted</span>
+      <span>v 1.10.85</span>
+    </div>
+    <div class="right">
+      <span>9 goals · 62 phases · 412 checkpoints</span>
+    </div>
+  </footer>
+</div>
+
+<!-- ===== TWEAKS PANEL ===== -->
+<div class="tweaks" id="tweaks">
+  <h3>
+    Tweaks
+    <button class="icon-btn" id="tweak-close" style="width:24px; height:24px"><svg class="i" style="width:12px;height:12px"><use href="#i-x"/></svg></button>
+  </h3>
+  <div class="tweak-row">
+    <label>Accent</label>
+    <div class="swatches" id="swatches">
+      <div class="swatch active" style="background:#3DDC97" data-accent="#3DDC97" data-dim="#1F8A5C"></div>
+      <div class="swatch" style="background:#7AA2FF" data-accent="#7AA2FF" data-dim="#3C63C4"></div>
+      <div class="swatch" style="background:#C882FF" data-accent="#C882FF" data-dim="#8146C4"></div>
+      <div class="swatch" style="background:#F5B544" data-accent="#F5B544" data-dim="#B37C1A"></div>
+      <div class="swatch" style="background:#FF7A7A" data-accent="#FF7A7A" data-dim="#C44C4C"></div>
+    </div>
+  </div>
+  <div class="tweak-row">
+    <label>Density</label>
+    <div class="seg" id="density">
+      <button data-d="compact">Compact</button>
+      <button class="active" data-d="comfort">Comfortable</button>
+    </div>
+  </div>
+  <div class="tweak-row">
+    <label>Phase rail</label>
+    <div class="seg" id="rail-mode">
+      <button class="active" data-r="on">Visible</button>
+      <button data-r="off">Hidden</button>
+    </div>
+  </div>
+  <div class="tweak-row">
+    <label>Right panel</label>
+    <div class="seg" id="panel-mode">
+      <button class="active" data-p="on">Shown</button>
+      <button data-p="off">Focus mode</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================ DATA ================ */
+const goals = [
+  { id: 'migrate', title: 'migrate-multica-runtime-model', status: 'active', phases: 11, done: 6, tag: 'In progress' },
+  { id: 'plans-summary', title: 'plans-summary-checkpoint-ux', status: 'active', phases: 8, done: 7, tag: '83%' },
+  { id: 'port-rust', title: 'Port from Python to Rust', status: 'active', phases: 10, done: 7, tag: '67%' },
+  { id: 'plans-exp', title: 'Projects Plans Experience', status: 'active', phases: 6, done: 3, tag: '50%' },
+  { id: 'repo-workflow', title: 'Repository workflow guidance', status: 'active', phases: 7, done: 5, tag: '72%' },
+  { id: 'timeline-checkpoint', title: 'plans-full-width-timeline-checkpoint-logs', status: 'active', phases: 9, done: 5, tag: '56%' },
+  { id: 'omx-agent', title: 'omx-agent-worktree-github-sandbox-boost', status: 'active', phases: 12, done: 4, tag: '38%' },
+  { id: 'review-accounts', title: 'working-now-waiting-review-accounts', status: 'blocked', phases: 5, done: 3, tag: 'Blocked' },
+  { id: 'auth', title: 'Auth and Accounts', status: 'pending', phases: 4, done: 0, tag: 'Not started' },
+];
+
+const phases = [
+  { n: 1, label: 'P1', name: 'Scope', title: 'Lock migration direction and resolve conflicting deprecation strategy docs', status: 'done',
+    desc: 'Align stakeholders on Python→Rust ownership boundaries, identify blockers, and produce a signed-off migration brief.',
+    checks: [
+      { t: 'Reconcile deprecation notes across docs/runtime, docs/platform, and adr/', tag: 'feature', done: true },
+      { t: 'Interview service owners about freeze window constraints', tag: 'feature', done: true },
+      { t: 'Publish signed migration brief to /docs/migrations/multica-01.md', tag: 'feature', done: true },
+    ]},
+  { n: 2, label: 'P2', name: 'Freeze', title: 'Freeze Python ↔ Rust API/session contract inventory', status: 'done',
+    desc: 'Snapshot every contract surface so downstream phases can detect drift.',
+    checks: [
+      { t: 'Generate contract schema snapshot at tag v3.1-freeze', tag: 'feature', done: true },
+      { t: 'Add contract lint in CI failing on schema drift', tag: 'runtime', done: true },
+      { t: 'Publish freeze notice to engineering channel', tag: 'feature', done: true },
+    ]},
+  { n: 3, label: 'P3', name: 'Ownership', title: 'Define Rust/Python ownership for integration, heartbeat, claim, progress, complete, fail', status: 'done',
+    desc: 'Map each RPC to an owner, document back-compat rules, and stand up the shadow router.', checks: [
+      { t: 'Author OWNERS.md with per-RPC ownership', tag: 'feature', done: true },
+      { t: 'Shadow router scaffolded in crates/multica-shadow', tag: 'runtime', done: true },
+      { t: 'Audit hooks emitting ownership metrics', tag: 'runtime', done: true },
+    ]},
+  { n: 4, label: 'P4', name: 'Replay', title: 'Land baseline Rust runtime parent/child tests and replay harness', status: 'done',
+    desc: 'Ship the golden-path replay suite that gates every subsequent phase.', checks: [
+      { t: 'Port fixtures from pytest to Rust proptest', tag: 'runtime', done: true },
+      { t: 'Replay harness landed in crates/multica-replay', tag: 'runtime', done: true },
+      { t: 'Gate CI on replay pass for every PR touching multica-*', tag: 'runtime', done: true },
+    ]},
+  { n: 5, label: 'P5', name: 'Lifecycle', title: 'Port runtime schema for lifecycle parity and shutdown semantics', status: 'done',
+    desc: 'Move start/stop/suspend semantics to Rust-owned state machine.', checks: [
+      { t: 'Derive lifecycle state machine in multica-core', tag: 'runtime', done: true },
+      { t: 'Shutdown fuzzing tests green', tag: 'runtime', done: true },
+      { t: 'Documented back-compat for drain semantics', tag: 'feature', done: true },
+    ]},
+  { n: 6, label: 'P6', name: 'Surfaces', title: 'Port projects/plans write + runtime control surfaces to Rust-owned handlers', status: 'done',
+    desc: 'Flip writes; keep reads on Python until phase 7 ships.', checks: [
+      { t: 'Write-path handlers migrated', tag: 'runtime', done: true },
+      { t: 'Legacy Python write shim deleted', tag: 'runtime', done: true },
+      { t: 'Feature flag multica.write.rust ON in staging', tag: 'runtime', done: true },
+    ]},
+  { n: 7, label: 'P7', name: 'Reads', title: 'Port dashboard usage/account read slices to Rust-owned data paths', status: 'active',
+    desc: 'The current phase — move the read-hot-path for usage and account dashboard queries to Rust. Hold the freeze.',
+    checks: [
+      { t: 'Define usage_totals_fast in crates/multica-dashboard', tag: 'runtime', done: true },
+      { t: 'Port account_summary reader with parity tests', tag: 'runtime', done: true },
+      { t: 'Wire shadow-compare for 24h before cutover', tag: 'runtime', done: true },
+      { t: 'Approve shadow diff <0.1% across all panels', tag: 'data', done: true },
+      { t: 'Document fallback path to Python reader', tag: 'feature', done: true },
+      { t: 'Backfill integration tests for account summaries', tag: 'runtime', done: true },
+      { t: 'Detect drift in usage_totals_fast against baseline', tag: 'bugfix', done: false },
+      { t: 'Publish cutover runbook', tag: 'feature', done: false },
+      { t: 'Remove Python read path after 72h soak', tag: 'runtime', done: false },
+    ]},
+  { n: 8, label: 'P8', name: 'Sessions', title: 'Port accounts/auth management workflows with cookie and refresh-token parity', status: 'pending',
+    desc: 'Requires phase 7 cutover.', checks: [
+      { t: 'Map cookie/token surfaces to Rust owner', tag: 'feature', done: false },
+      { t: 'Parity tests for rotation edge cases', tag: 'runtime', done: false },
+    ]},
+  { n: 9, label: 'P9', name: 'Jobs', title: 'Port proxy/responders/transaction internals with ordered retry parity', status: 'pending',
+    desc: 'Ordered retry is the hard part.', checks: [
+      { t: 'Design idempotency keys for ordered retry', tag: 'feature', done: false },
+      { t: 'Port retry loop to tokio-backed worker', tag: 'runtime', done: false },
+    ]},
+  { n: 10, label: 'P10', name: 'Realtime', title: 'Port websocket fan-out and realtime invalidation ownership to Rust', status: 'pending',
+    desc: '', checks: [
+      { t: 'Benchmark fan-out at 50k concurrent clients', tag: 'runtime', done: false },
+    ]},
+  { n: 11, label: 'P11', name: 'Cutover', title: 'Replace Python startup/lifespan orchestration with Rust lifecycle manager', status: 'pending',
+    desc: 'Final cutover.', checks: [
+      { t: 'Decommission python multica-runtime', tag: 'runtime', done: false },
+    ]},
+];
+
+/* ================ RENDER ================ */
+const goalList = document.getElementById('goal-list');
+let activeGoal = 'migrate';
+
+function renderGoals() {
+  goalList.innerHTML = goals.map(g => {
+    const pct = Math.round((g.done / g.phases) * 100);
+    const dotClass = g.status === 'active' ? 'active' : g.status === 'blocked' ? 'blocked' : g.status === 'done' ? 'done' : 'pending';
+    return `
+      <div class="goal-item ${g.id === activeGoal ? 'active' : ''}" data-id="${g.id}">
+        <div class="title"><span class="dot ${dotClass}"></span>${g.title}</div>
+        <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+        <div class="meta"><span>${g.done}/${g.phases} phases</span><span>·</span><span>${g.tag}</span></div>
+      </div>`;
+  }).join('');
+  goalList.querySelectorAll('.goal-item').forEach(el => {
+    el.addEventListener('click', () => {
+      activeGoal = el.dataset.id;
+      renderGoals();
+      const g = goals.find(x => x.id === activeGoal);
+      document.getElementById('crumb-goal').textContent = g.title;
+      document.getElementById('goal-title-main').textContent = g.title;
+    });
+  });
+}
+
+const phaseRail = document.getElementById('phase-rail');
+function renderPhaseRail() {
+  phaseRail.innerHTML = phases.map(p => `
+    <div class="phase-node ${p.status}" data-n="${p.n}">
+      <div class="label">${p.label}</div>
+      <div class="name">${p.name}</div>
+      <div class="tick"></div>
+    </div>
+  `).join('');
+  phaseRail.querySelectorAll('.phase-node').forEach(el => {
+    el.addEventListener('click', () => {
+      const n = parseInt(el.dataset.n, 10);
+      const card = document.querySelector(`.phase-card[data-n="${n}"]`);
+      card.classList.add('expanded');
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+}
+
+const phaseCards = document.getElementById('phase-cards');
+function renderPhases() {
+  phaseCards.innerHTML = phases.map(p => {
+    const total = p.checks.length;
+    const doneCt = p.checks.filter(c => c.done).length;
+    const pct = total ? Math.round((doneCt / total) * 100) : 0;
+    const statusBadge = p.status === 'done'
+      ? '<span class="badge" style="background:rgba(61,220,151,0.08); color:var(--accent); border-color:rgba(61,220,151,0.2)">Completed</span>'
+      : p.status === 'active'
+      ? '<span class="badge warn">In progress</span>'
+      : '<span class="badge gray">Pending</span>';
+    const expanded = p.status === 'active' ? 'expanded' : '';
+    return `
+      <div class="phase-card ${p.status} ${expanded}" data-n="${p.n}">
+        <div class="phase-head">
+          <div class="num">${p.n}</div>
+          <div class="body">
+            <div class="phase-meta"><span>${p.label}</span>·<span>${p.name.toUpperCase()}</span></div>
+            <div class="phase-title">${p.title}</div>
+          </div>
+          <div class="right">
+            ${statusBadge}
+            <div class="checkbar">
+              <div class="mini-bar"><div class="mini-fill" style="width:${pct}%"></div></div>
+              <div class="ct">${doneCt}/${total}</div>
+            </div>
+            <svg class="i caret" style="width:14px;height:14px"><use href="#i-caret"/></svg>
+          </div>
+        </div>
+        <div class="phase-body">
+          ${p.desc ? `<div class="phase-desc">${p.desc}</div>` : ''}
+          <div class="check-list">
+            ${p.checks.map((c, i) => `
+              <div class="check-item ${c.done ? 'checked' : ''}" data-n="${p.n}" data-i="${i}">
+                <div class="check ${c.done ? 'checked' : ''}">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+                </div>
+                <div class="text">${c.t}</div>
+                <div class="tag ${c.tag}">${c.tag}</div>
+              </div>
+            `).join('')}
+          </div>
+          <div class="phase-actions">
+            <div class="add-check"><svg class="i" style="width:12px;height:12px"><use href="#i-plus"/></svg> Add checkpoint</div>
+            <button class="btn"><svg class="i"><use href="#i-copy"/></svg> Copy starter prompt for phase ${p.n}</button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  phaseCards.querySelectorAll('.phase-head').forEach(head => {
+    head.addEventListener('click', () => {
+      head.closest('.phase-card').classList.toggle('expanded');
+    });
+  });
+
+  phaseCards.querySelectorAll('.check-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const n = parseInt(item.dataset.n, 10);
+      const i = parseInt(item.dataset.i, 10);
+      const p = phases.find(x => x.n === n);
+      p.checks[i].done = !p.checks[i].done;
+      renderPhases();
+      updateOverview();
+    });
+  });
+}
+
+function updateOverview() {
+  const all = phases.flatMap(p => p.checks);
+  const done = all.filter(c => c.done).length;
+  const total = all.length;
+  const pct = Math.round((done / total) * 100);
+  document.getElementById('ring-pct').textContent = pct + '%';
+  const C = 2 * Math.PI * 42;
+  document.getElementById('ring-fill').setAttribute('stroke-dasharray', C);
+  document.getElementById('ring-fill').setAttribute('stroke-dashoffset', C * (1 - pct/100));
+}
+
+/* ================ TWEAKS ================ */
+const tweakBtn = document.getElementById('tweak-btn');
+const tweakPanel = document.getElementById('tweaks');
+tweakBtn.addEventListener('click', () => tweakPanel.classList.toggle('open'));
+document.getElementById('tweak-close').addEventListener('click', () => tweakPanel.classList.remove('open'));
+
+document.querySelectorAll('#swatches .swatch').forEach(sw => {
+  sw.addEventListener('click', () => {
+    document.querySelectorAll('#swatches .swatch').forEach(s => s.classList.remove('active'));
+    sw.classList.add('active');
+    const accent = sw.dataset.accent;
+    const dim = sw.dataset.dim;
+    document.documentElement.style.setProperty('--accent', accent);
+    document.documentElement.style.setProperty('--accent-dim', dim);
+    // rgb for bg
+    const hex = accent.replace('#','');
+    const r = parseInt(hex.substr(0,2),16);
+    const g = parseInt(hex.substr(2,2),16);
+    const b = parseInt(hex.substr(4,2),16);
+    document.documentElement.style.setProperty('--accent-bg', `rgba(${r},${g},${b},0.08)`);
+  });
+});
+
+document.querySelectorAll('#density button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#density button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.body.classList.toggle('compact', b.dataset.d === 'compact');
+  });
+});
+
+document.querySelectorAll('#rail-mode button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#rail-mode button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    document.querySelector('.phase-rail').style.display = b.dataset.r === 'off' ? 'none' : 'flex';
+  });
+});
+document.querySelectorAll('#panel-mode button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('#panel-mode button').forEach(x => x.classList.remove('active'));
+    b.classList.add('active');
+    const main = document.querySelector('.main');
+    if (b.dataset.p === 'off') {
+      main.style.gridTemplateColumns = '280px 1fr';
+      document.querySelector('.sidebar').style.display = 'none';
+    } else {
+      main.style.gridTemplateColumns = '280px 1fr 340px';
+      document.querySelector('.sidebar').style.display = '';
+    }
+  });
+});
+
+document.getElementById('expand-all').addEventListener('click', (e) => {
+  const allExpanded = [...document.querySelectorAll('.phase-card')].every(c => c.classList.contains('expanded'));
+  document.querySelectorAll('.phase-card').forEach(c => {
+    if (allExpanded) c.classList.remove('expanded');
+    else c.classList.add('expanded');
+  });
+  e.target.textContent = allExpanded ? 'Expand all' : 'Collapse all';
+});
+
+/* ================ INIT ================ */
+renderGoals();
+renderPhaseRail();
+renderPhases();
+updateOverview();
+</script>
+
+</body>
+</html>

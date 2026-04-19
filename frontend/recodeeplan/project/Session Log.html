@@ -1,0 +1,1227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Sessions · Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0D12;
+    --bg-elev: #10141B;
+    --surface: #151A23;
+    --surface-2: #1B212C;
+    --surface-3: #232A37;
+    --border: #242C3A;
+    --border-strong: #323B4D;
+    --text: #E6EAF2;
+    --text-dim: #9AA3B4;
+    --text-muted: #646D80;
+    --accent: #3DDC97;
+    --accent-dim: #1F8A5C;
+    --accent-bg: rgba(61, 220, 151, 0.08);
+    --warn: #F5B544;
+    --danger: #EF6F6F;
+    --info: #7AA2FF;
+    --purple: #C882FF;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  .app {
+    display: grid;
+    grid-template-columns: 260px 1fr 240px;
+    height: 100vh;
+  }
+
+  /* ========== LEFT RAIL ========== */
+  .rail {
+    background: var(--bg-elev);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+  }
+  .rail-top {
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .proj {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .proj-mark {
+    width: 28px; height: 28px;
+    border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+    display: grid; place-items: center;
+    color: #05110B;
+    font-weight: 700;
+    font-size: 12px;
+  }
+  .proj .n { font-weight: 600; font-size: 13px; }
+  .proj .s { font-size: 11px; color: var(--text-muted); }
+  .proj .info { flex: 1; min-width: 0; }
+  .caret { width: 14px; height: 14px; color: var(--text-muted); stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .new-btn {
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: var(--accent);
+    color: #05110B;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    border: 0;
+    cursor: pointer;
+    width: 100%;
+    font-family: inherit;
+  }
+  .new-btn:hover { background: #53e5a6; }
+  .i { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+
+  .sessions-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 8px;
+  }
+  .section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 600;
+    padding: 10px 8px 6px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .session-item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    margin: 1px 0;
+    cursor: pointer;
+    border: 1px solid transparent;
+    font-size: 12.5px;
+  }
+  .session-item:hover { background: var(--surface); }
+  .session-item.active {
+    background: var(--surface);
+    border-color: var(--border-strong);
+  }
+  .session-item .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .dot-active { background: var(--accent); box-shadow: 0 0 0 3px rgba(61,220,151,0.15); }
+  .dot-idle { background: var(--text-muted); }
+  .dot-warn { background: var(--warn); }
+  .session-item .t {
+    flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    color: var(--text);
+  }
+  .session-item .when {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+    flex-shrink: 0;
+  }
+  .session-item.active .t { font-weight: 500; }
+
+  .rail-bottom {
+    border-top: 1px solid var(--border);
+    padding: 14px;
+  }
+  .usage-block { margin-bottom: 12px; }
+  .usage-block:last-child { margin-bottom: 0; }
+  .usage-head {
+    display: flex; justify-content: space-between; align-items: baseline;
+    font-size: 11px;
+    margin-bottom: 4px;
+  }
+  .usage-head .l { color: var(--text-dim); font-weight: 500; }
+  .usage-head .r { font-family: 'JetBrains Mono', monospace; color: var(--text); font-weight: 600; }
+  .usage-track {
+    height: 4px;
+    background: var(--surface-3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .usage-fill { height: 100%; border-radius: 2px; }
+  .usage-fill.a { background: var(--accent); }
+  .usage-fill.b { background: var(--info); }
+  .usage-sub { font-size: 10px; color: var(--text-muted); margin-top: 3px; font-family: 'JetBrains Mono', monospace; }
+
+  .rail-footer {
+    display: flex; gap: 6px;
+    padding: 10px 8px;
+    border-top: 1px solid var(--border);
+  }
+  .rail-footer .mini {
+    flex: 1;
+    display: flex; align-items: center; gap: 6px;
+    padding: 7px 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: 11.5px;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .rail-footer .mini:hover { background: var(--surface-2); color: var(--text); }
+
+  /* ========== CENTER CHAT ========== */
+  .chat {
+    display: flex; flex-direction: column;
+    background: var(--bg);
+    overflow: hidden;
+  }
+  .chat-top {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    height: 56px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+    flex-shrink: 0;
+    flex-wrap: nowrap;
+    min-width: 0;
+    gap: 10px;
+  }
+  .chat-top .lft { display: flex; align-items: center; gap: 12px; min-width: 0; flex-shrink: 1; overflow: hidden; }
+  .chat-top .rgt { flex-shrink: 0; }
+  .chat-title {
+    font-weight: 600; font-size: 14px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .chat-title .mono { font-size: 12px; color: var(--text-dim); font-weight: 400; }
+  .branch {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 9px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font-size: 11px;
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-dim);
+  }
+  .branch .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  .chat-top .rgt { display: flex; align-items: center; gap: 6px; }
+  .ic-btn {
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    border-radius: 7px;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .ic-btn:hover { background: var(--surface); border-color: var(--border); color: var(--text); }
+  .sel {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .sel:hover { border-color: var(--border-strong); }
+  .sel .icon {
+    width: 14px; height: 14px;
+    display: grid; place-items: center;
+    background: var(--info);
+    border-radius: 3px;
+    color: #05110B;
+    font-weight: 700; font-size: 9px;
+  }
+
+  .chat-scroll {
+    flex: 1; overflow-y: auto;
+    padding: 24px 0 140px;
+  }
+  .chat-inner {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 0 32px;
+    display: flex; flex-direction: column;
+    gap: 16px;
+  }
+
+  /* ===== MESSAGE BUBBLES ===== */
+  .msg { display: flex; }
+  .msg.user { justify-content: flex-end; }
+  .msg.assistant { justify-content: flex-start; }
+
+  .bubble {
+    border-radius: 14px;
+    padding: 14px 16px;
+    font-size: 13px;
+    max-width: 92%;
+    line-height: 1.55;
+  }
+  .bubble.user {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    max-width: 66%;
+  }
+  .bubble.assistant {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    width: 100%;
+    max-width: 100%;
+  }
+  .bubble.thinking {
+    background: transparent;
+    border: 1px dashed var(--border);
+    color: var(--text-dim);
+    font-style: italic;
+  }
+  .bubble.thinking::before {
+    content: '✦ thinking';
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--purple);
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+    font-style: normal;
+  }
+
+  .bubble code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    padding: 1px 5px;
+    background: var(--surface-3);
+    border-radius: 4px;
+    color: var(--info);
+  }
+
+  .img-attach {
+    display: inline-flex; flex-direction: column; gap: 8px;
+    padding: 10px;
+    background: var(--bg);
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+  .img-attach .label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text);
+  }
+  .img-attach .thumb {
+    width: 88px; height: 88px;
+    background: var(--surface-2);
+    border-radius: 6px;
+    display: grid; place-items: center;
+    color: var(--info);
+  }
+  .img-attach .thumb svg { width: 32px; height: 32px; }
+  .img-ref { font-size: 12px; color: var(--text-dim); margin-top: 8px; }
+
+  .bubble-actions {
+    display: flex; gap: 4px;
+    margin-top: 8px;
+    opacity: 0.6;
+  }
+  .bubble-actions .act {
+    width: 24px; height: 24px;
+    display: grid; place-items: center;
+    border-radius: 5px;
+    color: var(--text-muted);
+    cursor: pointer;
+    background: transparent;
+    border: 0;
+  }
+  .bubble-actions .act:hover { background: var(--surface-3); color: var(--text); }
+
+  /* ===== TOOL CALLS ===== */
+  .tool-block {
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .tool-head {
+    padding: 10px 14px;
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    color: var(--text);
+    font-weight: 500;
+  }
+  .tool-head:hover { background: var(--surface-2); }
+  .tool-head .carett {
+    transition: transform 0.2s ease;
+    color: var(--text-muted);
+  }
+  .tool-block.open .tool-head .carett { transform: rotate(90deg); }
+  .tool-head .cnt { color: var(--text-muted); font-weight: 400; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+  .tool-head .elapsed {
+    margin-left: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+
+  .tool-list {
+    display: none;
+    padding: 4px 12px 12px;
+    border-top: 1px solid var(--border);
+    padding-top: 10px;
+    margin-top: 0;
+  }
+  .tool-block.open .tool-list { display: flex; flex-direction: column; gap: 8px; }
+
+  .tool-row {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 10px;
+    align-items: start;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    padding: 4px 6px;
+  }
+  .tool-row .t-icon {
+    width: 18px; height: 18px;
+    display: grid; place-items: center;
+    border-radius: 4px;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .t-icon.shell { background: rgba(122,162,255,0.1); color: var(--info); }
+  .t-icon.read { background: rgba(61,220,151,0.1); color: var(--accent); }
+  .t-icon.tool { background: rgba(200,130,255,0.1); color: var(--purple); }
+  .t-icon.write { background: rgba(245,181,68,0.1); color: var(--warn); }
+  .tool-row .label {
+    color: var(--text-dim);
+    margin-right: 4px;
+    font-weight: 500;
+  }
+  .tool-row .val {
+    color: var(--text);
+    word-break: break-all;
+  }
+  .tool-row .val .code {
+    color: var(--text);
+  }
+  .tool-row .out {
+    margin-top: 4px;
+    padding: 8px 10px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: pre-wrap;
+    line-height: 1.5;
+  }
+  .tool-row .status {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 600;
+    margin-left: 6px;
+  }
+  .status.ok { background: rgba(61,220,151,0.1); color: var(--accent); }
+  .status.warn { background: rgba(245,181,68,0.1); color: var(--warn); }
+
+  /* ===== BASH CODE BLOCKS ===== */
+  .bash {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-top: 8px;
+    overflow: hidden;
+  }
+  .bash-head {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-muted);
+  }
+  .bash-head .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .bash pre {
+    margin: 0;
+    padding: 10px 12px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11.5px;
+    color: var(--text);
+    white-space: pre-wrap;
+    line-height: 1.55;
+  }
+  .bash .com { color: var(--text-muted); }
+  .bash .str { color: var(--accent); }
+  .bash .flag { color: var(--info); }
+
+  /* ===== COMPOSER ===== */
+  .composer-wrap {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 20px 32px 16px;
+    background: linear-gradient(180deg, transparent 0%, var(--bg) 30%);
+    pointer-events: none;
+  }
+  .composer-stack {
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex; flex-direction: column; gap: 10px;
+    pointer-events: auto;
+  }
+  .composer {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-radius: 16px;
+    padding: 14px 10px 14px 16px;
+    display: flex; align-items: center; gap: 10px;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.35);
+  }
+  .composer input {
+    flex: 1;
+    background: transparent;
+    border: 0; outline: 0;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 4px 0;
+  }
+  .composer input::placeholder { color: var(--text-muted); }
+  .composer .tool-picker {
+    width: 22px; height: 22px;
+    display: grid; place-items: center;
+    color: var(--text-muted);
+  }
+  .composer .actions {
+    display: flex; align-items: center; gap: 4px;
+  }
+  .round-btn {
+    width: 30px; height: 30px;
+    display: grid; place-items: center;
+    border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    cursor: pointer;
+  }
+  .round-btn:hover { background: var(--surface-3); color: var(--text); }
+  .round-btn.send { color: var(--text-muted); }
+
+  /* --- toolbar below composer --- */
+  .comp-tools {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 6px;
+    flex-wrap: wrap;
+  }
+  .plan-toggle {
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 5px 10px 5px 6px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+  }
+  .plan-toggle:hover { background: var(--surface); }
+  .plan-toggle .box {
+    width: 16px; height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid var(--border-strong);
+    display: grid; place-items: center;
+    background: transparent;
+    flex-shrink: 0;
+  }
+  .plan-toggle.on .box {
+    background: var(--purple);
+    border-color: var(--purple);
+  }
+  .plan-toggle.on .box::after {
+    content: '';
+    width: 8px; height: 8px;
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2305110B' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'><path d='M20 6 9 17l-5-5'/></svg>") center/contain no-repeat;
+  }
+  .plan-toggle .bars {
+    display: inline-flex; flex-direction: column; gap: 2px;
+    width: 12px;
+  }
+  .plan-toggle .bars span {
+    height: 2px;
+    background: var(--text-dim);
+    border-radius: 1px;
+  }
+  .plan-toggle .bars span:nth-child(1) { width: 100%; }
+  .plan-toggle .bars span:nth-child(2) { width: 70%; }
+  .plan-toggle .bars span:nth-child(3) { width: 85%; }
+
+  .pill {
+    position: relative;
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .pill:hover { background: var(--surface); }
+  .pill .i-lead { color: var(--text-dim); width: 13px; height: 13px; }
+  .pill .i-caret { color: var(--text-muted); width: 12px; height: 12px; }
+
+  .pop {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 0;
+    min-width: 160px;
+    background: var(--bg-elev);
+    border: 1px solid var(--border-strong);
+    border-radius: 8px;
+    padding: 4px;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.5);
+    display: none;
+    z-index: 50;
+  }
+  .pill.open .pop { display: block; }
+  .pop .opt {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    color: var(--text);
+    cursor: pointer;
+  }
+  .pop .opt:hover { background: var(--surface); }
+  .pop .opt.selected {
+    background: var(--info);
+    color: #05110B;
+    font-weight: 500;
+  }
+  .pop .opt .tick { color: inherit; width: 12px; height: 12px; opacity: 0; }
+  .pop .opt.selected .tick { opacity: 1; }
+  .pop .sep {
+    height: 1px; background: var(--border); margin: 4px 2px;
+  }
+
+  .comp-tools .spacer { flex: 1; }
+  .diag-btn {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    display: grid; place-items: center;
+    color: var(--info);
+    cursor: pointer;
+  }
+  .diag-btn::after {
+    content: '';
+    width: 8px; height: 8px;
+    background: var(--info);
+    border-radius: 50%;
+  }
+
+  /* ========== RIGHT RAIL ========== */
+  .side {
+    background: var(--bg-elev);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    display: flex; flex-direction: column;
+  }
+  .side-sec {
+    padding: 16px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .side-h {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+    font-weight: 600;
+    margin-bottom: 8px;
+  }
+  .side-val {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
+  }
+  .side-sub {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+  .stat-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 4px 0;
+    font-size: 11.5px;
+  }
+  .stat-row .k { color: var(--text-dim); }
+  .stat-row .v { color: var(--text); font-family: 'JetBrains Mono', monospace; font-weight: 500; }
+
+  .timeline {
+    display: flex; flex-direction: column;
+    position: relative;
+    padding-left: 16px;
+  }
+  .timeline::before {
+    content: '';
+    position: absolute;
+    left: 4px; top: 6px; bottom: 6px;
+    width: 1px;
+    background: var(--border);
+  }
+  .tl-item {
+    position: relative;
+    padding: 4px 0;
+    font-size: 11px;
+  }
+  .tl-item::before {
+    content: '';
+    position: absolute;
+    left: -16px;
+    top: 9px;
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--surface-3);
+    border: 1px solid var(--border-strong);
+  }
+  .tl-item.done::before { background: var(--accent); border-color: var(--accent); }
+  .tl-item.now::before { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 3px rgba(61,220,151,0.15); }
+  .tl-item .w { color: var(--text); font-weight: 500; font-size: 11.5px; }
+  .tl-item .m { color: var(--text-muted); font-size: 10.5px; font-family: 'JetBrains Mono', monospace; }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: padding-box; border: 2px solid transparent; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-caret" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-caret-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24"><path d="M7 11 12 6l5 5"/><path d="M12 6v14"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-feedback" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+    <symbol id="i-term" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></symbol>
+    <symbol id="i-maximize" viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4zM20 4h-6v2h4v4h2zM4 20h6v-2H6v-4H4zM20 20h-6v-2h4v-4h2z"/></symbol>
+    <symbol id="i-sidebar" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+    <symbol id="i-account" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-attach" viewBox="0 0 24 24"><path d="m21 11.5-9 9a5 5 0 0 1-7-7l9-9a3.5 3.5 0 0 1 5 5L10 18.5a2 2 0 0 1-3-3l8-8"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="1.5"/><path d="m21 15-5-5L5 21"/></symbol>
+    <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-chev-up" viewBox="0 0 24 24"><path d="m6 15 6-6 6 6"/></symbol>
+    <symbol id="i-model" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+    <symbol id="i-gauge" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 3v2M21 12h-2M12 21v-2M3 12h2M18.4 5.6l-1.4 1.4M18.4 18.4l-1.4-1.4M5.6 18.4l1.4-1.4M5.6 5.6l1.4 1.4"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  </defs>
+</svg>
+
+<div class="app">
+
+  <!-- ============ LEFT RAIL ============ -->
+  <aside class="rail">
+    <div class="rail-top">
+      <div class="proj">
+        <div class="proj-mark">R</div>
+        <div class="info">
+          <div class="n">recodee</div>
+          <div class="s">21 sessions · updated 12h</div>
+        </div>
+        <svg class="caret"><use href="#i-caret-down"/></svg>
+      </div>
+      <button class="new-btn">
+        <svg class="i"><use href="#i-plus"/></svg> New session
+      </button>
+    </div>
+
+    <div class="sessions-list">
+      <div class="section-label"><span>Today</span><span class="mono" style="color:var(--text-muted); font-weight:400">3</span></div>
+      <div class="session-item">
+        <span class="dot dot-active"></span>
+        <span class="t">Project folder path w…</span>
+        <span class="when">2h</span>
+      </div>
+      <div class="session-item">
+        <span class="dot dot-active"></span>
+        <span class="t">[Image #1] ensure th…</span>
+        <span class="when">4h</span>
+      </div>
+      <div class="session-item active">
+        <span class="dot dot-active"></span>
+        <span class="t">[Image #1] can the g…</span>
+        <span class="when">12h</span>
+      </div>
+
+      <div class="section-label" style="margin-top:6px"><span>Yesterday</span><span class="mono" style="color:var(--text-muted); font-weight:400">5</span></div>
+      <div class="session-item">
+        <span class="dot dot-idle"></span>
+        <span class="t">replay harness flakey …</span>
+        <span class="when">1d</span>
+      </div>
+      <div class="session-item">
+        <span class="dot dot-idle"></span>
+        <span class="t">port account_summary…</span>
+        <span class="when">1d</span>
+      </div>
+      <div class="session-item">
+        <span class="dot dot-warn"></span>
+        <span class="t">drift on usage_totals_fast</span>
+        <span class="when">1d</span>
+      </div>
+      <div class="session-item">
+        <span class="dot dot-idle"></span>
+        <span class="t">contract freeze v3.1</span>
+        <span class="when">1d</span>
+      </div>
+      <div class="session-item">
+        <span class="dot dot-idle"></span>
+        <span class="t">shadow router scaffold</span>
+        <span class="when">1d</span>
+      </div>
+
+      <div class="section-label" style="margin-top:6px"><span>Earlier</span></div>
+      <div class="session-item">
+        <span class="dot dot-idle"></span>
+        <span class="t">migrate brief draft</span>
+        <span class="when">3d</span>
+      </div>
+      <div class="session-item">
+        <span class="dot dot-idle"></span>
+        <span class="t">OWNERS.md per-RPC</span>
+        <span class="when">4d</span>
+      </div>
+      <div class="session-item">
+        <span class="dot dot-idle"></span>
+        <span class="t">ports + metrics audit</span>
+        <span class="when">5d</span>
+      </div>
+      <div class="session-item" style="color:var(--text-muted); justify-content:center; font-size:11.5px; margin-top:6px">More…</div>
+    </div>
+
+    <div class="rail-bottom">
+      <div class="section-label" style="padding:0 0 8px">Usage</div>
+      <div class="usage-block">
+        <div class="usage-head">
+          <div class="l">Session</div>
+          <div class="r">6%</div>
+        </div>
+        <div class="usage-track"><div class="usage-fill a" style="width:6%"></div></div>
+        <div class="usage-sub">Resets in 5h</div>
+      </div>
+      <div class="usage-block">
+        <div class="usage-head">
+          <div class="l">Weekly</div>
+          <div class="r">85%</div>
+        </div>
+        <div class="usage-track"><div class="usage-fill b" style="width:85%"></div></div>
+        <div class="usage-sub">Resets in 4d</div>
+      </div>
+    </div>
+
+    <div class="rail-footer">
+      <div class="mini">
+        <svg class="i"><use href="#i-account"/></svg>
+        Account
+      </div>
+      <div class="mini">
+        <svg class="i"><use href="#i-settings"/></svg>
+        Settings
+      </div>
+    </div>
+  </aside>
+
+  <!-- ============ CENTER CHAT ============ -->
+  <section class="chat" style="position:relative">
+    <header class="chat-top">
+      <div class="lft">
+        <button class="ic-btn" title="Collapse"><svg class="i"><use href="#i-sidebar"/></svg></button>
+        <div class="chat-title">
+          <span>recodee</span>
+          <span class="branch"><span class="dot"></span> dev</span>
+        </div>
+      </div>
+      <div class="rgt">
+        <button class="ic-btn" title="Run"><svg class="i"><use href="#i-play"/></svg></button>
+        <div class="sel"><span class="icon">V</span> VS Code <svg class="caret"><use href="#i-caret-down"/></svg></div>
+        <button class="ic-btn" title="Terminal"><svg class="i"><use href="#i-term"/></svg></button>
+        <button class="ic-btn" title="Split"><svg class="i"><use href="#i-split"/></svg></button>
+        <button class="ic-btn" title="Expand"><svg class="i"><use href="#i-maximize"/></svg></button>
+      </div>
+    </header>
+
+    <div class="chat-scroll">
+      <div class="chat-inner">
+
+        <!-- USER MESSAGE WITH IMAGE -->
+        <div class="msg user">
+          <div class="bubble user">
+            <div class="img-attach">
+              <div class="label">Image 1</div>
+              <div class="thumb"><svg><use href="#i-image"/></svg></div>
+            </div>
+            <div class="img-ref">[Image #1] ensure the sidebar has white theme design too when I choose light mode</div>
+          </div>
+        </div>
+
+        <!-- ASSISTANT THINKING + TOOL CALLS -->
+        <div class="msg assistant">
+          <div class="bubble assistant">
+            I'm updating the light-mode styling so the left sidebar switches to a white theme when <code>Light</code> is selected. First I'll load the repo conventions/skill guidance and inspect the current sidebar/theme wiring before making targeted edits.
+          </div>
+        </div>
+
+        <div class="msg assistant">
+          <div class="tool-block open">
+            <div class="tool-head">
+              <svg class="caret carett"><use href="#i-caret"/></svg>
+              <span>3 tool calls</span>
+              <span class="cnt">· context-gathering</span>
+              <span class="elapsed">1.4s</span>
+            </div>
+            <div class="tool-list">
+              <div class="tool-row">
+                <div class="t-icon tool"><svg class="i" style="width:11px;height:11px"><use href="#i-settings"/></svg></div>
+                <div><span class="label">tool:</span><span class="val">state_list_active</span><span class="status ok">ok</span></div>
+              </div>
+              <div class="tool-row">
+                <div class="t-icon read"><svg class="i" style="width:11px;height:11px"><use href="#i-copy"/></svg></div>
+                <div><span class="label">read:</span><span class="val">recodee/CLAUDE.md</span></div>
+              </div>
+              <div class="tool-row">
+                <div class="t-icon read"><svg class="i" style="width:11px;height:11px"><use href="#i-copy"/></svg></div>
+                <div><span class="label">read:</span><span class="val">recodee/apps/web/theme.ts</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ASSISTANT REASONING -->
+        <div class="msg assistant">
+          <div class="bubble assistant">
+            I restored the current OMX context and confirmed there's no active mode lock. Next I'm checking branch/worktree state plus sidebar/theme source files, then I'll patch only the light-theme path.
+            <div class="bubble-actions">
+              <button class="act" title="Copy"><svg class="i" style="width:12px;height:12px"><use href="#i-copy"/></svg></button>
+              <button class="act" title="Feedback"><svg class="i" style="width:12px;height:12px"><use href="#i-feedback"/></svg></button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SECOND TOOL CALL BLOCK -->
+        <div class="msg assistant">
+          <div class="tool-block open">
+            <div class="tool-head">
+              <svg class="caret carett"><use href="#i-caret"/></svg>
+              <span>3 tool calls</span>
+              <span class="cnt">· exploration</span>
+              <span class="elapsed">0.9s</span>
+            </div>
+            <div class="tool-list">
+              <div class="tool-row">
+                <div class="t-icon shell"><svg class="i" style="width:11px;height:11px"><use href="#i-term"/></svg></div>
+                <div>
+                  <span class="label">Explored</span><br/>
+                  <span class="val">Read <code style="background:var(--surface-3); padding:1px 5px; border-radius:3px; color:var(--info)">SKILL.md</code> · .codex/skills/ui-ux-pro-max/SKILL.md</span>
+                </div>
+              </div>
+              <div class="tool-row">
+                <div class="t-icon shell"><svg class="i" style="width:11px;height:11px"><use href="#i-term"/></svg></div>
+                <div><span class="val"><code style="color:var(--info)">git rev-parse --abbrev-ref HEAD && git status --short</code></span></div>
+              </div>
+              <div class="tool-row">
+                <div class="t-icon shell"><svg class="i" style="width:11px;height:11px"><use href="#i-term"/></svg></div>
+                <div>
+                  <span class="label">Explored</span><br/>
+                  <span class="val">List <code style="color:var(--info)">rg --files</code></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ASSISTANT CONCLUSION -->
+        <div class="msg assistant">
+          <div class="bubble assistant">
+            I found the key constraint: the current checkout is <code>dev</code>, so I need to switch this work into an agent worktree before any edits. I'm checking for an existing assigned agent branch first, then I'll continue there or create a fresh one.
+          </div>
+        </div>
+
+        <!-- THINKING BUBBLE -->
+        <div class="msg assistant">
+          <div class="bubble thinking">
+            Agent worktrees isolate changes per task so dev stays clean. If there's already an assigned branch named <code>agent/codex-admin/*</code> I should reuse it; otherwise spin up a fresh one keyed to this session's slug.
+          </div>
+        </div>
+
+        <!-- THIRD TOOL CALL -->
+        <div class="msg assistant">
+          <div class="tool-block open">
+            <div class="tool-head">
+              <svg class="caret carett"><use href="#i-caret"/></svg>
+              <span>3 tool calls</span>
+              <span class="cnt">· worktree check</span>
+              <span class="elapsed">0.6s</span>
+            </div>
+            <div class="tool-list">
+              <div class="tool-row">
+                <div class="t-icon shell"><svg class="i" style="width:11px;height:11px"><use href="#i-term"/></svg></div>
+                <div>
+                  <span class="label">Explored</span><br/>
+                  <span class="val">List <code style="color:var(--info)">2&gt;/dev/null</code></span>
+                </div>
+              </div>
+              <div class="tool-row">
+                <div class="t-icon shell"><svg class="i" style="width:11px;height:11px"><use href="#i-term"/></svg></div>
+                <div><span class="val"><code style="color:var(--info)">git worktree list</code></span></div>
+              </div>
+              <div class="tool-row">
+                <div class="t-icon shell"><svg class="i" style="width:11px;height:11px"><use href="#i-term"/></svg></div>
+                <div><span class="val"><code style="color:var(--info)">git branch --list 'agent/*'</code></span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ASSISTANT BRANCH CREATION -->
+        <div class="msg assistant">
+          <div class="bubble assistant">
+            No active Codex worktree for this task is open, so I'm creating a fresh agent branch/worktree now and will perform all edits there.
+          </div>
+        </div>
+
+        <!-- BASH CODE BLOCK -->
+        <div class="msg assistant">
+          <div class="bash">
+            <div class="bash-head"><span class="dot"></span> bash · agent/codex-admin/sidebar-light-mode-theme-683393</div>
+<pre>bash <span class="str">scripts/agent-branch-start.sh</span> <span class="str">"sidebar-light-mode-theme-683393"</span> <span class="flag">&lt;file...&gt;</span>
+  <span class="com"># implement + commit</span>
+bash <span class="str">scripts/agent-branch-finish.sh</span> <span class="flag">--branch</span> <span class="str">"agent/codex-admin/sidebar-light-mode-theme-683393"</span> <span class="flag">--base</span> dev <span class="flag">--via-pr</span> <span class="flag">--wait-for-merge</span></pre>
+          </div>
+        </div>
+
+        <!-- FINAL ASSISTANT -->
+        <div class="msg assistant">
+          <div class="bubble assistant">
+            Created sandbox branch <code>agent/codex-admin/sidebar-light-mode-theme-683393</code>. All changes for the light-mode sidebar will live in that worktree so <code>dev</code> stays clean. I'm now locating the sidebar/theme implementation and the relevant tests.
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- COMPOSER -->
+    <div class="composer-wrap">
+      <div class="composer-stack">
+        <div class="composer">
+          <div class="tool-picker">
+            <svg class="i"><use href="#i-attach"/></svg>
+          </div>
+          <input placeholder="Ask Codex to do something…"/>
+          <div class="actions">
+            <button class="round-btn" title="Expand"><svg class="i" style="width:12px;height:12px"><use href="#i-chev-up"/></svg></button>
+            <button class="round-btn" title="Voice"><svg class="i" style="width:13px;height:13px"><use href="#i-mic"/></svg></button>
+            <button class="round-btn send" title="Send"><svg class="i" style="width:13px;height:13px"><use href="#i-up"/></svg></button>
+          </div>
+        </div>
+
+        <div class="comp-tools">
+          <button class="plan-toggle on" id="plan-toggle">
+            <span class="box"></span>
+            <span class="bars"><span></span><span></span><span></span></span>
+            <span>Plan</span>
+          </button>
+
+          <button class="pill" data-pop="model">
+            <svg class="i i-lead"><use href="#i-model"/></svg>
+            <span id="v-model">gpt-5.4</span>
+            <svg class="i i-caret"><use href="#i-caret-down"/></svg>
+            <div class="pop" data-menu="model">
+              <div class="opt selected" data-v="gpt-5.4"><span>gpt-5.4</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt" data-v="gpt-5.4-mini"><span>gpt-5.4-mini</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="sep"></div>
+              <div class="opt" data-v="claude-sonnet-4.5"><span>claude-sonnet-4.5</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt" data-v="claude-opus-4.5"><span>claude-opus-4.5</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt" data-v="claude-haiku-4.5"><span>claude-haiku-4.5</span><svg class="i tick"><use href="#i-check"/></svg></div>
+            </div>
+          </button>
+
+          <button class="pill" data-pop="reason">
+            <svg class="i i-lead"><use href="#i-gauge"/></svg>
+            <span id="v-reason">medium</span>
+            <svg class="i i-caret"><use href="#i-caret-down"/></svg>
+            <div class="pop" data-menu="reason">
+              <div class="opt" data-v="low"><span>low</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt selected" data-v="medium"><span>medium</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt" data-v="high"><span>high</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt" data-v="x-high"><span>x-high</span><svg class="i tick"><use href="#i-check"/></svg></div>
+            </div>
+          </button>
+
+          <button class="pill" data-pop="access">
+            <svg class="i i-lead"><use href="#i-shield"/></svg>
+            <span id="v-access">On-Request</span>
+            <svg class="i i-caret"><use href="#i-caret-down"/></svg>
+            <div class="pop" data-menu="access">
+              <div class="opt" data-v="Read only"><span>Read only</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt selected" data-v="On-Request"><span>On-Request</span><svg class="i tick"><use href="#i-check"/></svg></div>
+              <div class="opt" data-v="Full access"><span>Full access</span><svg class="i tick"><use href="#i-check"/></svg></div>
+            </div>
+          </button>
+
+          <div class="spacer"></div>
+          <button class="diag-btn" title="Diagnostics"></button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ RIGHT RAIL ============ -->
+  <aside class="side">
+    <div class="side-sec">
+      <div class="side-h">Branch</div>
+      <div class="side-val">dev</div>
+      <div class="side-sub">No changes detected.</div>
+    </div>
+
+    <div class="side-sec">
+      <div class="side-h">Session</div>
+      <div class="stat-row"><span class="k">Started</span><span class="v">12h 04m ago</span></div>
+      <div class="stat-row"><span class="k">Turns</span><span class="v">14</span></div>
+      <div class="stat-row"><span class="k">Tool calls</span><span class="v">27</span></div>
+      <div class="stat-row"><span class="k">Reads</span><span class="v">9</span></div>
+      <div class="stat-row"><span class="k">Writes</span><span class="v">3</span></div>
+      <div class="stat-row"><span class="k">Images</span><span class="v">2</span></div>
+    </div>
+
+    <div class="side-sec">
+      <div class="side-h">Progress</div>
+      <div class="timeline">
+        <div class="tl-item done">
+          <div class="w">Loaded skills</div>
+          <div class="m">12h ago</div>
+        </div>
+        <div class="tl-item done">
+          <div class="w">Confirmed dev checkout</div>
+          <div class="m">12h ago</div>
+        </div>
+        <div class="tl-item done">
+          <div class="w">Created agent worktree</div>
+          <div class="m">11h ago</div>
+        </div>
+        <div class="tl-item now">
+          <div class="w">Patching sidebar theme</div>
+          <div class="m">active</div>
+        </div>
+        <div class="tl-item">
+          <div class="w">Run test suite</div>
+          <div class="m">pending</div>
+        </div>
+        <div class="tl-item">
+          <div class="w">Open PR to dev</div>
+          <div class="m">pending</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="side-sec">
+      <div class="side-h">Files touched</div>
+      <div class="stat-row"><span class="k mono">apps/web/theme.ts</span><span class="v" style="color:var(--accent)">+12 −3</span></div>
+      <div class="stat-row"><span class="k mono">apps/web/Sidebar.tsx</span><span class="v" style="color:var(--accent)">+8 −2</span></div>
+      <div class="stat-row"><span class="k mono">apps/web/tokens.css</span><span class="v" style="color:var(--warn)">~</span></div>
+    </div>
+
+    <div class="side-sec">
+      <div class="side-h">Model</div>
+      <div class="side-val">claude-sonnet-4.5</div>
+      <div class="side-sub">context: 55% · temp 0.2</div>
+    </div>
+  </aside>
+
+</div>
+
+<script>
+  // Toggle tool-call blocks open/closed
+  document.querySelectorAll('.tool-block .tool-head').forEach(head => {
+    head.addEventListener('click', () => head.parentElement.classList.toggle('open'));
+  });
+
+  // Select session row
+  document.querySelectorAll('.session-item').forEach(el => {
+    el.addEventListener('click', () => {
+      document.querySelectorAll('.session-item').forEach(x => x.classList.remove('active'));
+      el.classList.add('active');
+    });
+  });
+
+  // Plan toggle
+  const planBtn = document.getElementById('plan-toggle');
+  planBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    planBtn.classList.toggle('on');
+  });
+
+  // Composer pill dropdowns
+  document.querySelectorAll('.pill').forEach(pill => {
+    pill.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasOpen = pill.classList.contains('open');
+      document.querySelectorAll('.pill').forEach(p => p.classList.remove('open'));
+      if (!wasOpen) pill.classList.add('open');
+    });
+    pill.querySelectorAll('.opt').forEach(opt => {
+      opt.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const menu = pill.getAttribute('data-pop');
+        pill.querySelectorAll('.opt').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+        const label = opt.querySelector('span').textContent;
+        const target = document.getElementById('v-' + menu);
+        if (target) target.textContent = label;
+        pill.classList.remove('open');
+      });
+    });
+  });
+  document.addEventListener('click', () => {
+    document.querySelectorAll('.pill').forEach(p => p.classList.remove('open'));
+  });
+</script>
+</body>
+</html>

@@ -1,0 +1,1821 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>How it works · Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0A0D12;
+    --bg-elev: #10141B;
+    --surface: #151A23;
+    --surface-2: #1B212C;
+    --surface-3: #232A37;
+    --border: #242C3A;
+    --border-strong: #323B4D;
+    --text: #E6EAF2;
+    --text-dim: #9AA3B4;
+    --text-muted: #646D80;
+    --accent: #3DDC97;
+    --accent-dim: #1F8A5C;
+    --warn: #F5B544;
+    --info: #7AA2FF;
+    --purple: #C882FF;
+    --vs-bg: #1E1E1E;
+    --vs-panel: #252526;
+    --vs-side: #181818;
+    --vs-border: #2A2D2E;
+    --vs-text: #CCCCCC;
+    --vs-dim: #808080;
+    --vs-blue: #007ACC;
+    --vs-green: #73C991;
+    --vs-orange: #E2C08D;
+    --vs-purple: #C586C0;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: 'Inter', -apple-system, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .mono { font-family: 'JetBrains Mono', monospace; }
+
+  /* ===== TOP BAR ===== */
+  .top {
+    height: 52px;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elev);
+  }
+  .top .lft { display: flex; align-items: center; gap: 14px; }
+  .top .mark {
+    width: 26px; height: 26px; border-radius: 7px;
+    background: linear-gradient(135deg, var(--accent), var(--accent-dim));
+    display: grid; place-items: center;
+    color: #05110B; font-weight: 700; font-size: 12px;
+  }
+  .top .title { font-weight: 600; font-size: 13px; }
+  .top .sub { color: var(--text-muted); font-size: 11.5px; }
+
+  .mode-seg {
+    display: flex;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 3px;
+  }
+  .mode-seg button {
+    background: transparent; border: 0; color: var(--text-dim);
+    font-family: inherit; font-size: 12px; font-weight: 500;
+    padding: 6px 14px; border-radius: 7px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .mode-seg button.active {
+    background: var(--surface-3);
+    color: var(--text);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+  }
+  .mode-seg button .dotc { width: 6px; height: 6px; border-radius: 50%; }
+  .dotc.a { background: var(--accent); }
+  .dotc.p { background: var(--purple); }
+  .dotc.m { background: var(--warn); }
+
+  .top .rgt { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-dim); }
+  .step-count .mono { color: var(--text); }
+
+  /* ===== MAIN TWO-PANE ===== */
+  .main {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    height: calc(100vh - 52px);
+  }
+
+  .pane { position: relative; overflow: hidden; border-right: 1px solid var(--border); }
+  .pane.right { border-right: 0; }
+  .pane-label {
+    position: absolute; top: 10px; left: 14px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: rgba(10,13,18,0.85);
+    backdrop-filter: blur(6px);
+    padding: 4px 8px;
+    border-radius: 5px;
+    border: 1px solid var(--border);
+    z-index: 10;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* ===== CHAT PANE ===== */
+  .chat-pane {
+    background: var(--bg);
+    display: flex; flex-direction: column;
+  }
+  .chat-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 48px 28px 20px;
+  }
+  .msg {
+    display: flex; margin-bottom: 14px;
+    opacity: 0; transform: translateY(8px);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+  }
+  .msg.shown { opacity: 1; transform: none; }
+  .msg.user { justify-content: flex-end; }
+
+  .bub {
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 12.5px;
+    max-width: 92%;
+    line-height: 1.55;
+  }
+  .bub.user {
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+    max-width: 80%;
+  }
+  .bub.assistant {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    width: 100%;
+  }
+  .bub.thinking {
+    background: transparent;
+    border: 1px dashed var(--border-strong);
+    color: var(--text-dim);
+  }
+  .bub.thinking::before {
+    content: '✦ thinking';
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--purple);
+    text-transform: uppercase;
+    margin-bottom: 5px;
+  }
+  .bub code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 1px 5px;
+    background: var(--surface-3);
+    border-radius: 4px;
+    color: var(--info);
+  }
+  .bub.plan {
+    border-left: 3px solid var(--purple);
+  }
+  .bub.plan::before {
+    content: '📋 plan';
+    display: block;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9.5px;
+    letter-spacing: 0.08em;
+    color: var(--purple);
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .bub.plan ol { margin: 4px 0 0; padding-left: 18px; }
+  .bub.plan li { margin-bottom: 4px; font-size: 12.5px; }
+  .bub.plan-list { border-left: 3px solid var(--purple); }
+  .bub.plan-list::before { content: '□ proposed phases'; display: block; font-family: 'JetBrains Mono', monospace; font-size: 9.5px; letter-spacing: 0.08em; color: var(--purple); text-transform: uppercase; margin-bottom: 8px; font-weight: 600; }
+  .bub.plan-list .title { font-weight: 600; margin-bottom: 6px; display: none; }
+  .bub.plan-list ol { margin: 0; padding-left: 20px; }
+  .bub.plan-list li { margin-bottom: 4px; font-size: 12.5px; }
+  .bub.conflict { background: rgba(241,76,76,0.08); border: 1px solid rgba(241,76,76,0.35); color: var(--text); }
+  .bub.conflict code { background: rgba(241,76,76,0.15); color: #FF8080; }
+  .bub.hint { background: rgba(200,130,255,0.08); border: 1px solid rgba(200,130,255,0.30); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11.5px; }
+  .bub.hint kbd { background: var(--surface-3); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-strong); font-family: inherit; font-size: 10.5px; }
+  .bub kbd { background: var(--surface-3); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--border-strong); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+  .ctrl-desc kbd { background: var(--surface-3); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--border); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+
+  .tool-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    width: 100%;
+  }
+  .tool-block .head {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11.5px; font-weight: 500;
+  }
+  .tool-block .head .cnt { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-weight: 400; font-size: 11px; }
+  .tool-block .head .elapsed { margin-left: auto; color: var(--text-muted); font-family: 'JetBrains Mono', monospace; font-size: 10.5px; }
+  .tool-list {
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+    display: flex; flex-direction: column; gap: 6px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+  }
+  .tool-list .t-row {
+    display: grid;
+    grid-template-columns: 18px 1fr;
+    gap: 8px; align-items: center;
+  }
+  .t-ico {
+    width: 16px; height: 16px;
+    display: grid; place-items: center;
+    border-radius: 4px;
+    font-size: 10px;
+  }
+  .t-ico.shell { background: rgba(122,162,255,0.12); color: var(--info); }
+  .t-ico.read { background: rgba(61,220,151,0.12); color: var(--accent); }
+  .t-ico.write { background: rgba(245,181,68,0.12); color: var(--warn); }
+  .t-ico.tool { background: rgba(200,130,255,0.12); color: var(--purple); }
+  .t-row .lbl { color: var(--text-dim); margin-right: 4px; }
+  .t-row .vl { color: var(--text); }
+
+  /* ===== TUTORIAL CONTROLS ===== */
+  .controls {
+    border-top: 1px solid var(--border);
+    padding: 14px 20px;
+    background: var(--bg-elev);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .ctrl-top {
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 12px;
+  }
+  .ctrl-step-label {
+    font-weight: 600;
+    color: var(--text);
+  }
+  .ctrl-step-num {
+    font-family: 'JetBrains Mono', monospace;
+    color: var(--text-muted);
+    margin-right: 8px;
+  }
+  .dots { display: flex; gap: 5px; }
+  .dots .d {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--surface-3);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .dots .d.active { background: var(--accent); width: 18px; border-radius: 3px; }
+  .dots .d.done { background: var(--accent-dim); }
+
+  .ctrl-desc {
+    font-size: 12px;
+    color: var(--text-dim);
+    line-height: 1.5;
+    min-height: 36px;
+  }
+  .ctrl-btns { display: flex; gap: 8px; }
+  .btn {
+    flex: 1;
+    padding: 8px 12px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px;
+  }
+  .btn:hover { border-color: var(--border-strong); background: var(--surface-2); }
+  .btn.primary {
+    background: var(--accent);
+    color: #05110B;
+    border-color: var(--accent);
+  }
+  .btn.primary:hover { background: #53e5a6; border-color: #53e5a6; }
+  .btn.disabled { opacity: 0.4; pointer-events: none; }
+
+  /* ===== VS CODE PANE ===== */
+  .vs {
+    background: var(--vs-bg);
+    display: flex; flex-direction: column;
+  }
+  .vs-titlebar {
+    height: 30px;
+    background: #323233;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px;
+    color: var(--vs-dim);
+    border-bottom: 1px solid #000;
+  }
+  .vs-body {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 48px 280px 1fr;
+    overflow: hidden;
+    min-height: 0;
+  }
+  .vs-activity {
+    background: var(--vs-side);
+    display: flex; flex-direction: column;
+    padding: 8px 0;
+    gap: 2px;
+    border-right: 1px solid var(--vs-border);
+  }
+  .vs-activity .ab {
+    width: 48px; height: 44px;
+    display: grid; place-items: center;
+    color: var(--vs-dim);
+    cursor: pointer;
+    position: relative;
+  }
+  .vs-activity .ab.active { color: #fff; }
+  .vs-activity .ab.active::before {
+    content: '';
+    position: absolute; left: 0; top: 8px; bottom: 8px;
+    width: 2px; background: #fff;
+  }
+  .vs-activity .ab .badge {
+    position: absolute;
+    bottom: 6px; right: 6px;
+    background: var(--vs-blue);
+    color: #fff;
+    font-size: 9px;
+    min-width: 14px; height: 14px;
+    display: grid; place-items: center;
+    border-radius: 7px;
+    padding: 0 3px;
+    font-weight: 600;
+  }
+  .vs-activity .sp { flex: 1; }
+  .vs-activity .ab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+
+  .vs-sc {
+    background: var(--vs-panel);
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    border-right: 1px solid var(--vs-border);
+  }
+  .vs-sc-head {
+    padding: 8px 14px 6px;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 11px;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: var(--vs-text);
+    letter-spacing: 0.02em;
+  }
+  .vs-sc-head .dots-h { color: var(--vs-dim); font-size: 14px; letter-spacing: 2px; cursor: pointer; }
+  .vs-sc-scroll {
+    flex: 1; overflow-y: auto;
+    padding-bottom: 30px;
+  }
+
+  /* Worktree cards */
+  .wt {
+    border-top: 1px solid var(--vs-border);
+    padding: 6px 0 10px;
+    opacity: 0.55;
+    transition: opacity 0.3s ease, background 0.3s ease;
+  }
+  .wt.active { opacity: 1; background: rgba(0,122,204,0.04); }
+  .wt.just-added { animation: flashIn 0.7s ease; }
+  @keyframes flashIn {
+    0% { background: rgba(61,220,151,0.2); }
+    100% { background: transparent; }
+  }
+  .wt.dev-pulling {
+    animation: devPull 1.8s ease;
+  }
+  @keyframes devPull {
+    0%   { background: rgba(122,162,255,0.00); }
+    30%  { background: rgba(122,162,255,0.20); }
+    100% { background: rgba(0,122,204,0.04); }
+  }
+  .pull-bar {
+    height: 3px;
+    background: var(--vs-border);
+    border-radius: 2px;
+    margin: 6px 14px 4px;
+    overflow: hidden;
+    position: relative;
+  }
+  .pull-bar::after {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent, var(--info), var(--accent), transparent);
+    animation: pullSlide 1.6s ease-in-out;
+  }
+  @keyframes pullSlide {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  .commit-chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    background: rgba(61,220,151,0.12);
+    color: var(--accent);
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    opacity: 0;
+    animation: chipIn 0.5s ease forwards 0.4s;
+  }
+  @keyframes chipIn {
+    0% { opacity: 0; transform: translateY(-3px); }
+    100% { opacity: 1; transform: none; }
+  }
+  .wt-active.active { background: rgba(0,122,204,0.04); }
+  .wt-head {
+    padding: 4px 14px;
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11.5px;
+    color: var(--vs-text);
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .wt-head .ic { color: var(--vs-purple); font-size: 13px; }
+  .wt-head .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .wt-head .tag {
+    font-size: 10px;
+    color: var(--vs-dim);
+    font-family: inherit;
+    display: flex; align-items: center; gap: 3px;
+  }
+  .wt-head .ct {
+    background: var(--vs-blue);
+    color: #fff;
+    font-size: 9px;
+    min-width: 16px; height: 14px;
+    border-radius: 7px;
+    padding: 0 4px;
+    display: grid; place-items: center;
+    font-weight: 600;
+  }
+  .wt-message {
+    margin: 6px 14px 4px;
+    padding: 5px 8px;
+    background: var(--vs-bg);
+    border: 1px solid var(--vs-border);
+    border-radius: 3px;
+    font-size: 11px;
+    color: var(--vs-dim);
+  }
+  .wt-commit {
+    margin: 0 14px 6px;
+    padding: 5px 0;
+    background: #0E639C;
+    color: #fff;
+    text-align: center;
+    font-size: 11px;
+    border-radius: 2px;
+    display: flex; align-items: center; justify-content: center; gap: 6px;
+    cursor: pointer;
+  }
+  .wt-commit:hover { background: #1177BB; }
+  .wt-changes {
+    padding: 4px 10px 0 18px;
+  }
+  .wt-changes-head {
+    font-size: 11px;
+    color: var(--vs-text);
+    padding: 2px 0;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .wt-changes-head .ct {
+    margin-left: auto;
+    background: var(--vs-blue);
+    color: #fff;
+    font-size: 9px;
+    min-width: 16px; height: 14px;
+    border-radius: 7px;
+    padding: 0 4px;
+    display: grid; place-items: center;
+    font-weight: 600;
+  }
+  .tree { padding-left: 8px; }
+  .tree-node {
+    display: flex; align-items: center; gap: 4px;
+    padding: 2px 4px;
+    font-size: 11.5px;
+    color: var(--vs-text);
+    font-family: 'JetBrains Mono', monospace;
+    position: relative;
+  }
+  .tree-node .carett {
+    width: 10px;
+    color: var(--vs-dim);
+  }
+  .tree-node.file .carett { visibility: hidden; }
+  .tree-node .fico {
+    width: 14px; height: 14px;
+    display: grid; place-items: center;
+    flex-shrink: 0;
+  }
+  .tree-node .fico.folder { color: #DCB67A; }
+  .tree-node .fico.rs { color: #CE422B; font-size: 10px; font-weight: 700; }
+  .tree-node .fico.tsx { color: var(--vs-blue); font-size: 10px; font-weight: 700; }
+  .tree-node .fico.ts { color: var(--vs-blue); font-size: 10px; font-weight: 700; }
+  .tree-node .fico.md { color: #519ABA; font-size: 10px; font-weight: 700; }
+  .tree-node .fico.yaml { color: #A03423; font-size: 10px; font-weight: 700; }
+  .tree-node .nm { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tree-node .status {
+    width: 14px; text-align: right;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10.5px;
+    font-weight: 600;
+  }
+  .tree-node .status.M { color: var(--vs-orange); }
+  .tree-node .status.U { color: var(--vs-green); }
+  .tree-node .status.D { color: #F14C4C; }
+  .tree-node.appearing {
+    animation: slideIn 0.45s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  @keyframes slideIn {
+    0% { opacity: 0; transform: translateX(-6px); background: rgba(115,193,145,0.15); }
+    100% { opacity: 1; transform: none; background: transparent; }
+  }
+
+  /* Editor pane */
+  .vs-editor {
+    background: var(--vs-bg);
+    display: flex; flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .vs-tabs {
+    height: 34px;
+    display: flex;
+    background: #2D2D2D;
+    border-bottom: 1px solid var(--vs-border);
+  }
+  .vs-tab {
+    display: flex; align-items: center; gap: 6px;
+    padding: 0 12px;
+    font-size: 11.5px;
+    color: var(--vs-dim);
+    border-right: 1px solid var(--vs-border);
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .vs-tab.active {
+    background: var(--vs-bg);
+    color: var(--vs-text);
+  }
+  .vs-tab .cl { margin-left: 4px; width: 14px; height: 14px; display: grid; place-items: center; color: var(--vs-dim); }
+  .vs-code {
+    flex: 1;
+    overflow: auto;
+    padding: 10px 0;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+  .line {
+    display: grid;
+    grid-template-columns: 44px 12px 1fr;
+    gap: 0;
+    padding: 0 10px 0 0;
+    white-space: pre;
+  }
+  .line .ln {
+    color: var(--vs-dim);
+    text-align: right;
+    padding-right: 14px;
+    user-select: none;
+  }
+  .line .gutter { color: transparent; }
+  .line.added { background: rgba(115,193,145,0.08); }
+  .line.added .gutter { color: var(--vs-green); }
+  .line.added .gutter::before { content: '+'; }
+  .line.removed { background: rgba(241,76,76,0.08); }
+  .line.removed .gutter { color: #F14C4C; }
+  .line.removed .gutter::before { content: '−'; }
+  .line.removed .content { color: #F14C4C; text-decoration: line-through; opacity: 0.7; }
+  .line.typing .caret {
+    display: inline-block;
+    width: 2px; height: 14px;
+    background: var(--vs-blue);
+    vertical-align: middle;
+    animation: blink 1s infinite;
+  }
+  @keyframes blink { 50% { opacity: 0; } }
+  .tok-k { color: #C586C0; }
+  .tok-f { color: #DCDCAA; }
+  .tok-t { color: #4EC9B0; }
+  .tok-s { color: #CE9178; }
+  .tok-c { color: #6A9955; font-style: italic; }
+  .tok-n { color: #B5CEA8; }
+  .tok-p { color: #9CDCFE; }
+
+  /* VS Code statusbar */
+  .vs-status {
+    height: 22px;
+    background: var(--vs-blue);
+    display: flex; align-items: center;
+    padding: 0 10px;
+    gap: 16px;
+    font-size: 11px;
+    color: #fff;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .vs-status .item { display: flex; align-items: center; gap: 5px; }
+  .vs-status .sp { flex: 1; }
+
+  /* ===== PLAN OVERLAY (plan mode view) ===== */
+  .plan-overlay {
+    position: absolute; inset: 0;
+    background: rgba(10, 13, 18, 0.92);
+    backdrop-filter: blur(4px);
+    display: none;
+    padding: 48px 28px 28px;
+    overflow-y: auto;
+  }
+  .plan-overlay.show { display: block; }
+  .plan-card {
+    background: var(--surface);
+    border: 1px solid var(--border-strong);
+    border-left: 3px solid var(--purple);
+    border-radius: 12px;
+    padding: 18px 20px;
+  }
+  .plan-card h2 {
+    margin: 0 0 4px;
+    font-size: 15px;
+    font-weight: 600;
+  }
+  .plan-card .p-sub {
+    font-size: 12px;
+    color: var(--text-dim);
+    margin-bottom: 14px;
+  }
+  .plan-step {
+    display: grid;
+    grid-template-columns: 26px 1fr;
+    gap: 12px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .plan-step:first-of-type { border-top: 0; }
+  .plan-step .n {
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    background: var(--surface-3);
+    color: var(--text-dim);
+    display: grid; place-items: center;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+  }
+  .plan-step.done .n { background: var(--accent); color: #05110B; }
+  .plan-step .what { font-size: 13px; font-weight: 500; }
+  .plan-step .why { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .plan-actions {
+    display: flex; gap: 8px; margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* Scrollbars */
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 5px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: padding-box; border: 2px solid transparent; }
+
+  .i { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+</style>
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-caret" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-caret-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+    <symbol id="i-reset" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 15-6.7L21 8M21 3v5h-5M21 12a9 9 0 0 1-15 6.7L3 16M3 21v-5h5"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-git" viewBox="0 0 24 24"><circle cx="18" cy="6" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M6 9v6a3 3 0 0 0 3 3h6M18 9a9 9 0 0 1-3 6"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-debug" viewBox="0 0 24 24"><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2"/><circle cx="12" cy="12" r="6"/></symbol>
+    <symbol id="i-ext" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="8"/><rect x="13" y="3" width="8" height="8"/><rect x="3" y="13" width="8" height="8"/><rect x="13" y="13" width="8" height="8"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 1v6M12 17v6M4.2 4.2l4.2 4.2M15.6 15.6l4.2 4.2M1 12h6M17 12h6M4.2 19.8l4.2-4.2M15.6 8.4l4.2-4.2"/></symbol>
+    <symbol id="i-account" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></symbol>
+    <symbol id="i-branch" viewBox="0 0 24 24"><line x1="6" y1="3" x2="6" y2="15"/><circle cx="18" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M18 9a9 9 0 0 1-9 9"/></symbol>
+  </defs>
+</svg>
+
+<!-- ===== TOP ===== -->
+<header class="top">
+  <div class="lft">
+    <div class="mark">R</div>
+    <div>
+      <div class="title">How it works</div>
+      <div class="sub">Watch an agent run — from prompt to merged PR</div>
+    </div>
+  </div>
+  <div class="mode-seg" id="mode-seg">
+    <button class="active" data-mode="execute"><span class="dotc a"></span> Execute mode</button>
+    <button data-mode="plan"><span class="dotc p"></span> Plan mode</button>
+    <button data-mode="merge"><span class="dotc m"></span> Merge mode</button>
+  </div>
+  <div class="rgt">
+    <span class="step-count"><span class="mono" id="top-step">1</span> / <span class="mono" id="top-total">9</span></span>
+  </div>
+</header>
+
+<!-- ===== MAIN ===== -->
+<div class="main">
+
+  <!-- LEFT: chat pane -->
+  <section class="pane chat-pane">
+    <div class="pane-label">chat · recodee</div>
+    <div class="chat-scroll" id="chat-scroll"></div>
+
+    <!-- merge overlay shows merge-mode tutorial -->
+    <div class="plan-overlay" id="merge-overlay" style="background: rgba(10,13,18,0.94);">
+      <div class="plan-card" style="border-left-color: var(--warn);">
+        <h2 style="display:flex; align-items:center; gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:var(--warn);display:inline-block"></span> Merge mode</h2>
+        <div class="p-sub">When two agent worktrees produce PRs that conflict, Merge mode spins up a third agent whose only job is to resolve the conflict — reading both sides, understanding intent, and writing a clean merge commit. You review the resolution, not the conflict markers.</div>
+
+        <div style="background:var(--bg-elev); border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:14px; font-family:'JetBrains Mono',monospace; font-size:11px;">
+          <div style="color:#F14C4C; display:flex; align-items:center; gap:6px; margin-bottom:4px;">⚠ conflict detected on <code style="color:var(--warn)">apps/dashboard/src/feature-flags.ts</code></div>
+          <div style="color:var(--text-muted); font-size:10.5px;">PR #421 (dashboard-rust-port) &nbsp;×&nbsp; PR #438 (flags-cleanup-sweep)</div>
+        </div>
+
+        <div class="plan-step done"><div class="n">1</div>
+          <div>
+            <div class="what">Conflict detected at merge time</div>
+            <div class="why">Base branch moved. Both PRs touched <code>feature-flags.ts</code>. GitHub blocks the merge.</div>
+          </div>
+        </div>
+        <div class="plan-step done"><div class="n">2</div>
+          <div>
+            <div class="what">Merge agent auto-spawns</div>
+            <div class="why">A fresh worktree <code>agent/merge/pr-421-vs-438</code> is created from the target branch. Both PRs get cherry-picked, conflict markers exposed.</div>
+          </div>
+        </div>
+        <div class="plan-step done"><div class="n">3</div>
+          <div>
+            <div class="what">Agent reads both sides + intent</div>
+            <div class="why">It loads the PR descriptions, the commit messages, and the surrounding code. Not a three-way textual merge — a semantic one.</div>
+          </div>
+        </div>
+        <div class="plan-step"><div class="n">4</div>
+          <div>
+            <div class="what">Resolution written + tests re-run</div>
+            <div class="why">Conflict markers removed, both features preserved. Test suite runs before the agent reports back.</div>
+          </div>
+        </div>
+        <div class="plan-step"><div class="n">5</div>
+          <div>
+            <div class="what">You review the merge commit</div>
+            <div class="why">You get a side-by-side: their change, your change, the agent's resolution — with a one-line rationale. Approve to merge, reject to retry.</div>
+          </div>
+        </div>
+
+        <div class="plan-actions">
+          <button class="btn" onclick="setMode('execute')"><svg class="i"><use href="#i-caret"/></svg> Back to execute demo</button>
+          <button class="btn primary" style="background:var(--warn); border-color:var(--warn); color:#1A0F00;"><svg class="i"><use href="#i-play"/></svg> See a live resolution</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- plan overlay shows plan-mode tutorial instead of chat -->
+    <div class="plan-overlay" id="plan-overlay">
+      <div class="plan-card">
+        <h2>Plan mode</h2>
+        <div class="p-sub">Plan mode turns the agent into a strategist. It won't touch code until you approve the plan — great for risky refactors or when you want to see the blast radius first.</div>
+
+        <div class="plan-step done"><div class="n">1</div>
+          <div>
+            <div class="what">Toggle Plan on in the composer</div>
+            <div class="why">The checkbox next to <code>Plan</code> turns purple. Access mode is forced to <code>Read only</code> while the plan is drafted.</div>
+          </div>
+        </div>
+        <div class="plan-step done"><div class="n">2</div>
+          <div>
+            <div class="what">Prompt as usual</div>
+            <div class="why">e.g. <em>"migrate dashboard reads to Rust"</em>. The agent reads the repo but writes nothing.</div>
+          </div>
+        </div>
+        <div class="plan-step done"><div class="n">3</div>
+          <div>
+            <div class="what">Review the proposed plan</div>
+            <div class="why">You get an ordered list of phases, files that will change, and risks. No worktree created yet.</div>
+          </div>
+        </div>
+        <div class="plan-step"><div class="n">4</div>
+          <div>
+            <div class="what">Approve phases selectively</div>
+            <div class="why">Check the phases you're happy with. Uncheck the rest. Edit the summary inline.</div>
+          </div>
+        </div>
+        <div class="plan-step"><div class="n">5</div>
+          <div>
+            <div class="what">Flip access to On‑Request</div>
+            <div class="why">Now the agent creates a worktree and starts executing approved phases, asking permission before each write.</div>
+          </div>
+        </div>
+
+        <div class="plan-actions">
+          <button class="btn" onclick="setMode('execute')"><svg class="i"><use href="#i-caret"/></svg> Back to execute demo</button>
+          <button class="btn primary"><svg class="i"><use href="#i-play"/></svg> Try it in a real session</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- controls -->
+    <div class="controls">
+      <div class="ctrl-top">
+        <div><span class="ctrl-step-num" id="ctrl-step-num">Step 01</span><span class="ctrl-step-label" id="ctrl-step-label">Prompt the agent</span></div>
+        <div class="dots" id="dots"></div>
+      </div>
+      <div class="ctrl-desc" id="ctrl-desc">
+        Every session starts with a prompt. Pick your model, reasoning level, and access mode — then type what you want done.
+      </div>
+      <div class="ctrl-btns">
+        <button class="btn" id="prev-btn">← Back</button>
+        <button class="btn" id="reset-btn"><svg class="i"><use href="#i-reset"/></svg> Reset</button>
+        <button class="btn primary" id="next-btn">Next step →</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- RIGHT: VS Code pane -->
+  <section class="pane right vs">
+    <div class="pane-label">vs code · live</div>
+    <div class="vs-titlebar">● ● ●   recodee — VS Code</div>
+
+    <div class="vs-body">
+      <!-- Activity bar -->
+      <div class="vs-activity">
+        <div class="ab"><svg><use href="#i-files"/></svg></div>
+        <div class="ab"><svg><use href="#i-search"/></svg></div>
+        <div class="ab active">
+          <svg><use href="#i-git"/></svg>
+          <div class="badge" id="act-badge">0</div>
+        </div>
+        <div class="ab"><svg><use href="#i-debug"/></svg></div>
+        <div class="ab"><svg><use href="#i-ext"/></svg></div>
+        <div class="sp"></div>
+        <div class="ab"><svg><use href="#i-account"/></svg></div>
+        <div class="ab"><svg><use href="#i-settings"/></svg></div>
+      </div>
+
+      <!-- Source Control sidebar -->
+      <div class="vs-sc">
+        <div class="vs-sc-head">
+          <span>Source Control</span>
+          <div style="display:flex; gap:10px; color:var(--vs-dim)">
+            <svg class="i" style="width:14px;height:14px"><use href="#i-plus"/></svg>
+            <svg class="i" style="width:14px;height:14px"><use href="#i-refresh"/></svg>
+            <svg class="i" style="width:14px;height:14px"><use href="#i-more"/></svg>
+          </div>
+        </div>
+        <div class="vs-sc-scroll" id="sc-scroll">
+          <!-- baseline worktree -->
+          <div class="wt active" data-wt="dev">
+            <div class="wt-head">
+              <svg class="i" style="width:13px;height:13px; color:#858585"><use href="#i-branch"/></svg>
+              <span class="name">dev</span>
+              <span class="tag">base · clean</span>
+            </div>
+            <div class="wt-message">Baseline branch — no agent activity.</div>
+          </div>
+
+          <!-- Agent worktrees appear here dynamically -->
+          <div id="worktrees"></div>
+        </div>
+      </div>
+
+      <!-- Editor -->
+      <div class="vs-editor">
+        <div class="vs-tabs" id="vs-tabs"></div>
+        <div class="vs-code" id="vs-code">
+          <div class="line"><span class="ln">1</span><span class="gutter"></span><span class="content tok-c">// Open a file in the Source Control panel →</span></div>
+          <div class="line"><span class="ln">2</span><span class="gutter"></span><span class="content tok-c">// Or advance the tutorial to watch an agent</span></div>
+          <div class="line"><span class="ln">3</span><span class="gutter"></span><span class="content tok-c">// spin up a sandbox worktree and edit code.</span></div>
+        </div>
+
+        <div class="vs-status">
+          <span class="item"><svg class="i" style="width:11px;height:11px"><use href="#i-branch"/></svg> <span id="status-branch">dev</span></span>
+          <span class="item" id="status-sync">↓ 0 ↑ 0</span>
+          <span class="item">⊘ <span id="status-errors">0</span> ⚠ 0</span>
+          <span class="sp"></span>
+          <span class="item">Ln 1, Col 1</span>
+          <span class="item">UTF-8</span>
+          <span class="item">TypeScript React</span>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+/* =====================================================
+   TUTORIAL SCRIPT
+   ===================================================== */
+
+// --- STEP DEFINITIONS for EXECUTE mode demo ---
+const executeSteps = [
+  {
+    label: 'Prompt the agent',
+    desc: 'Every session starts with a prompt. Pick your model, reasoning level, and access mode — then type what you want done.',
+    chat: [
+      { kind: 'user', text: `<strong>You</strong>: Port the dashboard usage slice from Python to Rust. Keep tests green.<br><br><span class="mono" style="font-size:10.5px; color:var(--text-muted)">gpt-5.4 · reasoning high · On-Request</span>` }
+    ],
+  },
+  {
+    label: 'Agent explores the repo',
+    desc: 'Before writing anything, the agent reads skills, checks git state, and surveys the files it might touch — in read-only mode.',
+    chat: [
+      { kind: 'assistant', text: `I'll load the repo skills and inspect the current Python + Rust wiring before making any edits.` },
+      { kind: 'tool', title: '3 tool calls', sub: '· context-gathering', elapsed: '1.2s', rows: [
+        { t: 'tool', lbl: 'tool:', val: 'state_list_active' },
+        { t: 'read', lbl: 'read:', val: 'recodee/CLAUDE.md' },
+        { t: 'read', lbl: 'read:', val: 'recodee/docs/migrations/multica-01.md' },
+      ]},
+    ],
+  },
+  {
+    label: 'Worktree sandbox created',
+    desc: 'Before any write, the agent creates an isolated <strong>git worktree</strong> — a sandbox branch off <code>dev</code>. Dev stays clean no matter what.',
+    chat: [
+      { kind: 'thinking', text: 'Need to isolate these edits. Creating <code>agent/codex/dashboard-rust-port-421</code> off dev.' },
+      { kind: 'tool', title: '1 tool call', sub: '· scripts/agent-branch-start.sh', elapsed: '0.4s', rows: [
+        { t: 'shell', lbl: 'bash:', val: `scripts/agent-branch-start.sh "dashboard-rust-port"` },
+      ]},
+    ],
+    vsAction: 'createWorktree',
+    wt: {
+      id: 'wt-dashboard',
+      name: 'agent_codex__dashboard-rust-port-421',
+      branch: 'agent/codex/dashboard-rust-port-421',
+    }
+  },
+  {
+    label: 'Agent edits files in the sandbox',
+    desc: 'The agent writes to files <em>only inside its worktree</em>. Watch files appear in Source Control and the diff stream into the editor.',
+    chat: [
+      { kind: 'assistant', text: `Writing the Rust reader in <code>crates/multica-dashboard/src/reader.rs</code> and wiring the feature flag.` },
+      { kind: 'tool', title: '3 tool calls', sub: '· writing files', elapsed: '2.1s', rows: [
+        { t: 'write', lbl: 'write:', val: 'crates/multica-dashboard/src/reader.rs' },
+        { t: 'write', lbl: 'write:', val: 'crates/multica-dashboard/src/mod.rs' },
+        { t: 'write', lbl: 'write:', val: 'apps/dashboard/src/feature-flags.ts' },
+      ]},
+    ],
+    vsAction: 'addFiles',
+    files: [
+      { wt: 'wt-dashboard', path: 'crates/multica-dashboard/src/reader.rs', status: 'U', ext: 'rs' },
+      { wt: 'wt-dashboard', path: 'crates/multica-dashboard/src/mod.rs', status: 'M', ext: 'rs' },
+      { wt: 'wt-dashboard', path: 'apps/dashboard/src/feature-flags.ts', status: 'M', ext: 'ts' },
+    ],
+    openFile: 'crates/multica-dashboard/src/reader.rs'
+  },
+  {
+    label: 'Live diff streams into the editor',
+    desc: 'You can watch the agent type. Every write shows up as an inline diff — green adds, red removes — exactly like a PR review.',
+    vsAction: 'typeDiff'
+  },
+  {
+    label: 'Second worktree for the ticket UX',
+    desc: 'Need a parallel effort? Start another prompt while this one runs. Each gets its <em>own</em> worktree — they never collide.',
+    chat: [
+      { kind: 'user', text: '<strong>You</strong>: Also fix the hydration flash on project sidebar.' },
+      { kind: 'assistant', text: `Spinning up a second worktree — this won't interrupt the Rust port.` },
+      { kind: 'tool', title: '1 tool call', sub: '· scripts/agent-branch-start.sh', elapsed: '0.4s', rows: [
+        { t: 'shell', lbl: 'bash:', val: `scripts/agent-branch-start.sh "projects-hydration-fix"` },
+      ]},
+    ],
+    vsAction: 'createWorktree',
+    wt: {
+      id: 'wt-hydration',
+      name: 'agent_codex__projects-hydration-mismatch-sidebar',
+      branch: 'agent/codex/projects-hydration-mismatch-sidebar',
+    }
+  },
+  {
+    label: 'Files stream into the second sandbox',
+    desc: 'Two agent sessions, two isolated branches, simultaneous progress. Your <code>dev</code> checkout is still untouched.',
+    vsAction: 'addFiles',
+    files: [
+      { wt: 'wt-hydration', path: 'apps/frontend/src/components/layout/loading-overlay.tsx', status: 'U', ext: 'tsx' },
+      { wt: 'wt-hydration', path: 'apps/frontend/src/components/ui/spinner.tsx', status: 'M', ext: 'tsx' },
+      { wt: 'wt-hydration', path: 'apps/frontend/src/lib/navigation-loader.ts', status: 'M', ext: 'ts' },
+    ],
+  },
+  {
+    label: 'Approve the commit',
+    desc: 'With access on <code>On-Request</code>, the agent pauses for your sign-off before committing. Click Commit to merge the sandbox to a PR.',
+    chat: [
+      { kind: 'assistant', text: `All phase-1 writes done. Tests pass locally. Ready to commit <code>agent/codex/dashboard-rust-port-421</code>.` },
+    ],
+    vsAction: 'showCommit'
+  },
+  {
+    label: 'PR opened, worktree dissolves',
+    desc: 'The worktree is merged via PR on approval and automatically cleaned up. Your repo goes back to a single <code>dev</code> checkout. Done.',
+    chat: [
+      { kind: 'tool', title: '2 tool calls', sub: '· finish', elapsed: '1.4s', rows: [
+        { t: 'shell', lbl: 'bash:', val: `scripts/agent-branch-finish.sh --via-pr --wait-for-merge` },
+        { t: 'tool', lbl: 'tool:', val: 'pr.merged → cleanup.worktree' },
+      ]},
+      { kind: 'assistant', text: `PR merged, worktree removed. You're back on a clean <code>dev</code>. 🎉` },
+    ],
+    vsAction: 'mergeWorktree',
+    wt: { id: 'wt-dashboard' }
+  }
+];
+
+// --- PLAN MODE STEPS ---
+const planSteps = [
+  {
+    label: 'Shift+Tab → Plan mode on',
+    desc: 'Press <kbd>Shift+Tab</kbd> to cycle permission modes: Normal → Auto-Accept → Plan. Plan mode locks the agent into <strong>read-only</strong> — any attempt to write, edit, or run shell commands gets refused at the tool layer.',
+    chat: [
+      { kind: 'hint', text: '<strong>⏸ plan mode on</strong> &nbsp;·&nbsp; <span class="mono" style="font-size:11px">claude --permission-mode plan</span>' },
+      { kind: 'user', text: `<strong>You</strong>: Port the dashboard usage slice from Python to Rust. Explore the code first, then give me a plan.` }
+    ],
+  },
+  {
+    label: 'Explore — deep read pass',
+    desc: 'The agent does an <strong>Explore phase</strong>: reads skills, searches the codebase, maps dependencies, and asks questions. No writes, no shell side-effects.',
+    chat: [
+      { kind: 'assistant', text: `Starting Explore phase. I'll map the current Python reader, the Rust crate skeleton, and everything that depends on the output shape.` },
+      { kind: 'tool', title: '8 tool calls', sub: '· read-only exploration', elapsed: '4.7s', rows: [
+        { t: 'read', lbl: 'read:', val: 'CLAUDE.md · AGENTS.md' },
+        { t: 'read', lbl: 'read:', val: 'apps/backend/dashboard/reader.py' },
+        { t: 'read', lbl: 'read:', val: 'apps/backend/dashboard/tests/test_reader.py' },
+        { t: 'read', lbl: 'read:', val: 'crates/multica-dashboard/src/lib.rs' },
+        { t: 'tool', lbl: 'grep:', val: 'read_usage_summary → 11 callers in 4 files' },
+        { t: 'tool', lbl: 'grep:', val: 'usage_totals_fast → 2 call sites + 1 migration' },
+        { t: 'tool', lbl: 'tool:', val: 'git_log --stat apps/backend/dashboard (last 90d)' },
+        { t: 'tool', lbl: 'tool:', val: 'write_file → ✗ refused (read-only mode)' },
+      ]},
+    ],
+    vsAction: 'createWorktree',
+    wt: {
+      id: 'wt-plan',
+      name: 'agent_plan__dashboard-rust-port',
+      branch: 'agent/plan/dashboard-rust-port',
+      readonly: true,
+    }
+  },
+  {
+    label: 'Plan drafted as a real markdown doc',
+    desc: 'The agent writes a real plan to <code>~/.claude/plans/</code> — ordered phases, file lists, risks, rollback. It survives <code>/clear</code> and context compaction, and persists across sessions until you approve or delete it.',
+    chat: [
+      { kind: 'assistant', text: `Plan written to <code>~/.claude/plans/2026-04-19-dashboard-rust-port.md</code>. 4 phases, ~3.5h execute time. Persists across sessions.` },
+      { kind: 'plan-list', items: [
+        '<strong>Phase 1 — Rust reader + types</strong> <span style="color:var(--text-muted)">· 2h · 3 files</span>',
+        '<strong>Phase 2 — Feature flag wiring</strong> <span style="color:var(--text-muted)">· 30m · 2 files</span>',
+        '<strong>Phase 3 — Shadow-read comparison</strong> <span style="color:var(--text-muted)">· 24h observe · 1 file</span>',
+        '<strong>Phase 4 — Cutover + Python deletion</strong> <span style="color:var(--text-muted)">· 1h · 6 files</span>',
+      ]},
+    ],
+    vsAction: 'planProposal',
+    wt: { id: 'wt-plan' }
+  },
+  {
+    label: 'Review — read the whole plan',
+    desc: 'The markdown opens in the editor. Full context: goal, approach, each phase with exact files, acceptance checks, risks with mitigations, rollback plan. This is the Explore → Plan → Review step of the loop.',
+    vsAction: 'openPlanDoc'
+  },
+  {
+    label: 'Edit the plan inline',
+    desc: 'Disagree with a step? Edit the markdown. Remove a phase. Add an acceptance check. Plan mode keeps iterating on the doc until you approve.',
+    chat: [
+      { kind: 'user', text: `<strong>You</strong>: Skip phase 4 for now — I want the Python reader kept as a fallback. Add a <em>load-test with 100 concurrent reads</em> to phase 3 acceptance.` },
+      { kind: 'assistant', text: `Updated the plan. Phase 4 marked <code>[deferred]</code>. Added load-test check to phase 3.` },
+    ],
+    vsAction: 'editPlan'
+  },
+  {
+    label: 'Approve → Execute phase',
+    desc: 'When the plan reads right, approve it. The agent switches out of Plan mode, escalates access to <code>On-Request</code>, and starts phase 1. The saved markdown is the single source of truth for what gets built.',
+    chat: [
+      { kind: 'user', text: `<strong>You</strong>: Looks good. Execute phases 1–3.` },
+      { kind: 'assistant', text: `Exiting Plan mode. Access escalated to On-Request. Starting Phase 1: Rust reader + types.` },
+      { kind: 'tool', title: '3 tool calls', sub: '· phase 1 begins', elapsed: '0.8s', rows: [
+        { t: 'shell', lbl: 'bash:', val: `scripts/agent-branch-start.sh "dashboard-rust-port" --from-plan` },
+        { t: 'read', lbl: 'read:', val: '~/.claude/plans/2026-04-19-dashboard-rust-port.md' },
+        { t: 'write', lbl: 'write:', val: 'crates/multica-dashboard/src/reader.rs' },
+      ]},
+    ],
+    vsAction: 'escalatePlan'
+  },
+  {
+    label: 'Drift? Shift+Tab back into Plan',
+    desc: 'If execution drifts from the plan, hit <kbd>Shift+Tab</kbd> back into Plan mode. The agent reads the saved plan + recent diffs and drafts a <em>revised</em> plan for the remaining work. Loop: Explore → Plan → Review → Execute.',
+    chat: [
+      { kind: 'hint', text: '<strong>⏸ plan mode on</strong> &nbsp;·&nbsp; re-entering to revise remaining phases' },
+      { kind: 'assistant', text: `Drift detected at phase 2 — flag shape changed upstream. Drafting <code>2026-04-19-dashboard-rust-port.v2.md</code> for phases 2–3.` },
+    ],
+    vsAction: 'revisePlan'
+  }
+];
+
+// --- MERGE MODE STEPS ---
+const mergeSteps = [
+  {
+    label: 'Two PRs are ready',
+    desc: 'You have two completed worktrees from separate sessions. Both PRs passed CI. Now try to merge.',
+    chat: [
+      { kind: 'assistant', text: `Two worktrees completed and open as PRs:` },
+      { kind: 'tool', title: '2 PRs open', sub: '· awaiting merge', elapsed: '', rows: [
+        { t: 'tool', lbl: 'PR #421:', val: 'agent/codex/dashboard-rust-port' },
+        { t: 'tool', lbl: 'PR #438:', val: 'agent/codex/flags-cleanup-sweep' },
+      ]},
+    ],
+    vsAction: 'seedTwoPRs'
+  },
+  {
+    label: 'Conflict detected',
+    desc: 'Both PRs edited <code>apps/dashboard/src/feature-flags.ts</code>. GitHub blocks the merge. Normally: you stop everything and resolve by hand.',
+    chat: [
+      { kind: 'conflict', text: `<strong>⚠ Merge conflict</strong><br>Both PRs modified <code>apps/dashboard/src/feature-flags.ts</code> at overlapping lines.` },
+    ],
+    vsAction: 'showConflict'
+  },
+  {
+    label: 'Merge agent auto-spawns',
+    desc: 'A <strong>merge agent</strong> worktree is created from the target branch. Its only job: reconcile the two PRs.',
+    chat: [
+      { kind: 'thinking', text: 'Spawning merge worker. Branch: <code>agent/merge/pr-421-vs-438</code>. Cherry-picking both heads.' },
+      { kind: 'tool', title: '2 tool calls', sub: '· merge setup', elapsed: '0.6s', rows: [
+        { t: 'shell', lbl: 'bash:', val: `scripts/merge-agent-start.sh --a 421 --b 438` },
+        { t: 'shell', lbl: 'bash:', val: `git cherry-pick origin/pr-421 origin/pr-438` },
+      ]},
+    ],
+    vsAction: 'createMergeWorktree',
+    wt: {
+      id: 'wt-merge',
+      name: 'agent_merge__pr-421-vs-438',
+      branch: 'agent/merge/pr-421-vs-438',
+      merge: true,
+    }
+  },
+  {
+    label: 'Agent reads both sides + intent',
+    desc: 'Semantic merge: the agent reads each PR description, the commit history, and the surrounding code to understand what each change is <em>for</em> — not just the text.',
+    chat: [
+      { kind: 'assistant', text: `Loaded both PR descriptions and the conflicting hunks. PR #421 adds <code>dashboard_reads_rust</code>; PR #438 refactors the flag object shape. Both should coexist.` },
+      { kind: 'tool', title: '5 tool calls', sub: '· intent analysis', elapsed: '1.8s', rows: [
+        { t: 'read', lbl: 'read:', val: 'PR #421 description + diff' },
+        { t: 'read', lbl: 'read:', val: 'PR #438 description + diff' },
+        { t: 'read', lbl: 'read:', val: 'apps/dashboard/src/feature-flags.ts (base)' },
+        { t: 'tool', lbl: 'tool:', val: 'git_blame feature-flags.ts' },
+        { t: 'tool', lbl: 'tool:', val: 'resolve_semantic --preserve-both' },
+      ]},
+    ],
+    vsAction: 'showConflictDiff'
+  },
+  {
+    label: 'Resolution written + tests',
+    desc: 'Agent writes the merged file — no conflict markers, both features preserved — and re-runs the test suite.',
+    chat: [
+      { kind: 'assistant', text: `Resolved. Applied PR #438's shape refactor on top, then added #421's flag entry in the new shape. Tests running.` },
+      { kind: 'tool', title: '2 tool calls', sub: '· resolve', elapsed: '4.1s', rows: [
+        { t: 'write', lbl: 'write:', val: 'apps/dashboard/src/feature-flags.ts' },
+        { t: 'shell', lbl: 'bash:', val: `pnpm test --filter=dashboard` },
+      ]},
+      { kind: 'assistant', text: `✓ 247 tests passed. Ready for your review.` },
+    ],
+    vsAction: 'applyResolution'
+  },
+  {
+    label: 'You review + merge',
+    desc: 'Three-way side-by-side: PR A, PR B, agent\'s resolution, with a one-line rationale. Approve to merge both PRs; reject to retry with a nudge.',
+    chat: [
+      { kind: 'user', text: '<strong>You</strong>: Looks right. Merge both.' },
+      { kind: 'assistant', text: `Both PRs merged via merge agent. Merge worktree dissolved. Back to clean <code>dev</code>.` },
+    ],
+    vsAction: 'dissolveMerge'
+  }
+];
+
+// --- active mode state ---
+let mode = 'execute';
+let steps = executeSteps;
+
+// --- state ---
+let cur = 0;
+
+// --- DOM refs ---
+const $chat = document.getElementById('chat-scroll');
+const $worktrees = document.getElementById('worktrees');
+const $dots = document.getElementById('dots');
+const $topStep = document.getElementById('top-step');
+const $topTotal = document.getElementById('top-total');
+const $ctrlLabel = document.getElementById('ctrl-step-label');
+const $ctrlNum = document.getElementById('ctrl-step-num');
+const $ctrlDesc = document.getElementById('ctrl-desc');
+const $prevBtn = document.getElementById('prev-btn');
+const $nextBtn = document.getElementById('next-btn');
+const $resetBtn = document.getElementById('reset-btn');
+const $actBadge = document.getElementById('act-badge');
+const $statusBranch = document.getElementById('status-branch');
+const $vsCode = document.getElementById('vs-code');
+const $vsTabs = document.getElementById('vs-tabs');
+const $planOverlay = document.getElementById('plan-overlay');
+const $modeSeg = document.getElementById('mode-seg');
+
+$topTotal.textContent = steps.length;
+
+// --- init dots ---
+function renderDots() {
+  $dots.innerHTML = steps.map((s, i) => `<div class="d ${i===cur?'active':(i<cur?'done':'')}" data-i="${i}"></div>`).join('');
+  $dots.querySelectorAll('.d').forEach(d => {
+    d.addEventListener('click', () => gotoStep(parseInt(d.dataset.i)));
+  });
+}
+
+// --- message rendering ---
+function appendMsg(m) {
+  let html = '';
+  if (m.kind === 'user') {
+    html = `<div class="msg user"><div class="bub user">${m.text}</div></div>`;
+  } else if (m.kind === 'assistant') {
+    html = `<div class="msg assistant"><div class="bub assistant">${m.text}</div></div>`;
+  } else if (m.kind === 'thinking') {
+    html = `<div class="msg assistant"><div class="bub thinking">${m.text}</div></div>`;
+  } else if (m.kind === 'hint') {
+    html = `<div class="msg assistant"><div class="bub hint">${m.text}</div></div>`;
+  } else if (m.kind === 'plan-list') {
+    const items = m.items.map(i=>`<li>${i}</li>`).join('');
+    html = `<div class="msg assistant"><div class="bub plan-list"><ol>${items}</ol></div></div>`;
+  } else if (m.kind === 'conflict') {
+    html = `<div class="msg assistant"><div class="bub conflict">${m.text}</div></div>`;
+  } else if (m.kind === 'tool') {
+    const rows = m.rows.map(r => `
+      <div class="t-row">
+        <div class="t-ico ${r.t}">${iconFor(r.t)}</div>
+        <div><span class="lbl">${r.lbl}</span><span class="vl">${r.val}</span></div>
+      </div>`).join('');
+    html = `<div class="msg assistant"><div class="tool-block">
+      <div class="head">
+        <span>${m.title}</span>
+        <span class="cnt">${m.sub||''}</span>
+        <span class="elapsed">${m.elapsed||''}</span>
+      </div>
+      <div class="tool-list">${rows}</div>
+    </div></div>`;
+  }
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html;
+  const node = wrap.firstElementChild;
+  $chat.appendChild(node);
+  requestAnimationFrame(() => node.classList.add('shown'));
+  $chat.scrollTo({ top: $chat.scrollHeight, behavior: 'smooth' });
+}
+function iconFor(t) {
+  if (t==='shell') return '&gt;_';
+  if (t==='read') return '📖';
+  if (t==='write') return '✎';
+  if (t==='tool') return '⚙';
+  return '·';
+}
+
+// --- worktree rendering ---
+function addWorktree(wt, isMerge=false) {
+  const colorStyle = wt.merge ? 'color:var(--warn)' : (wt.readonly ? 'color:var(--purple)' : 'color:var(--vs-purple)');
+  const tagExtra = wt.readonly ? ' · read-only' : (wt.merge ? ' · merge' : '');
+  const html = `
+    <div class="wt just-added active" data-wt="${wt.id}" data-readonly="${wt.readonly?'1':''}" data-merge="${wt.merge?'1':''}">
+      <div class="wt-head">
+        <svg class="i" style="width:13px;height:13px; ${colorStyle}"><use href="#i-branch"/></svg>
+        <span class="name" title="${wt.name}">${wt.name}</span>
+        <span class="tag">${wt.branch.split('/').slice(-1)[0].slice(0,10)}${tagExtra}</span>
+        <span class="ct" data-count="0">0</span>
+      </div>
+      <div class="wt-message">${wt.readonly ? 'Read-only — drafting plan, no writes yet.' : (wt.merge ? 'Merge agent — reconciling PR #421 × PR #438.' : `Message (Ctrl+Enter to commit on "${wt.branch}")`)}</div>
+      <div class="wt-commit" style="display:none" data-role="commit"><svg class="i" style="width:12px;height:12px"><use href="#i-check"/></svg> Commit</div>
+      <div class="wt-changes" style="display:none" data-role="changes">
+        <div class="wt-changes-head"><svg class="i" style="width:11px;height:11px"><use href="#i-caret-down"/></svg> Changes <span class="ct" data-count="0">0</span></div>
+        <div class="tree" data-role="tree"></div>
+      </div>
+    </div>`;
+  const wrap = document.createElement('div');
+  wrap.innerHTML = html.trim();
+  $worktrees.appendChild(wrap.firstElementChild);
+  setTimeout(() => {
+    const el = $worktrees.querySelector(`[data-wt="${wt.id}"]`);
+    if (el) el.classList.remove('just-added');
+  }, 700);
+  $statusBranch.textContent = wt.branch;
+}
+
+function addFilesToWorktree(files) {
+  // group by worktree id
+  const byWt = {};
+  files.forEach(f => {
+    (byWt[f.wt] = byWt[f.wt] || []).push(f);
+  });
+  Object.entries(byWt).forEach(([wtId, fs]) => {
+    const wtEl = $worktrees.querySelector(`[data-wt="${wtId}"]`);
+    if (!wtEl) return;
+    const changes = wtEl.querySelector('[data-role="changes"]');
+    const tree = wtEl.querySelector('[data-role="tree"]');
+    const commit = wtEl.querySelector('[data-role="commit"]');
+    commit.style.display = '';
+    changes.style.display = '';
+
+    fs.forEach((f, idx) => {
+      setTimeout(() => {
+        const parts = f.path.split('/');
+        const name = parts[parts.length - 1];
+        const folder = parts.slice(0, -1).join('/');
+        const node = document.createElement('div');
+        node.className = 'tree-node file appearing';
+        node.innerHTML = `
+          <span class="carett"></span>
+          <span class="fico ${f.ext}">${f.ext.toUpperCase()}</span>
+          <span class="nm" title="${f.path}">${name}</span>
+          <span class="status ${f.status}">${f.status}</span>`;
+        node.dataset.path = f.path;
+        node.addEventListener('click', () => openFileInEditor(f));
+        tree.appendChild(node);
+
+        // update counts
+        const ctBadges = wtEl.querySelectorAll('[data-count]');
+        ctBadges.forEach(b => {
+          const n = (parseInt(b.dataset.count) || 0) + 1;
+          b.dataset.count = n;
+          b.textContent = n;
+        });
+        const totalCount = parseInt($actBadge.textContent) + 1;
+        $actBadge.textContent = totalCount;
+      }, idx * 260);
+    });
+  });
+}
+
+function mergeWorktree(wtId) {
+  const el = $worktrees.querySelector(`[data-wt="${wtId}"]`);
+  if (!el) return;
+  el.style.transition = 'opacity 0.6s ease, max-height 0.6s ease, margin 0.6s ease';
+  el.style.opacity = '0';
+  el.style.maxHeight = '0';
+  el.style.overflow = 'hidden';
+  el.style.margin = '0';
+  setTimeout(() => { el.remove(); pullDev(); }, 600);
+  $statusBranch.textContent = 'dev';
+}
+
+function pullDev() {
+  const dev = document.querySelector('.wt[data-wt="dev"]');
+  if (!dev) return;
+  dev.classList.remove('dev-pulling');
+  void dev.offsetWidth;
+  dev.classList.add('dev-pulling');
+  // inject pull bar + chip, remove after
+  const msg = dev.querySelector('.wt-message');
+  const head = dev.querySelector('.wt-head');
+  if (head && !head.querySelector('.commit-chip')) {
+    const chip = document.createElement('span');
+    chip.className = 'commit-chip';
+    chip.innerHTML = '↓ pull · +1 commit';
+    head.appendChild(chip);
+    setTimeout(() => chip.remove(), 2400);
+  }
+  if (msg) {
+    const orig = msg.textContent;
+    msg.textContent = 'Pulling merged commit from origin/dev…';
+    msg.style.color = 'var(--info)';
+    setTimeout(() => { msg.textContent = orig; msg.style.color = ''; }, 1600);
+  }
+  if (!dev.querySelector('.pull-bar')) {
+    const bar = document.createElement('div');
+    bar.className = 'pull-bar';
+    dev.insertBefore(bar, msg);
+    setTimeout(() => bar.remove(), 1700);
+  }
+  // status bar sync indicator
+  const sync = document.getElementById('status-sync');
+  if (sync) {
+    const orig = sync.textContent;
+    sync.textContent = '↓ 1 ↑ 0';
+    setTimeout(() => { sync.textContent = '↓ 0 ↑ 0'; }, 1600);
+  }
+}
+
+function showCommitCTA() {
+  const commits = $worktrees.querySelectorAll('[data-role="commit"]');
+  commits.forEach(c => c.style.background = '#16825D');
+}
+
+// ===== PLAN MODE handlers =====
+function showPlanProposal(wtId) {
+  const el = $worktrees.querySelector(`[data-wt="${wtId}"]`);
+  if (!el) return;
+  $vsTabs.innerHTML = `<div class="vs-tab active"><span class="fico md" style="color:#519ABA; font-size:10px; font-weight:700">MD</span><span>2026-04-19-dashboard-rust-port.md</span><span style="margin-left:6px; color:var(--purple); font-size:10px">~/.claude/plans/</span></div>`;
+  $vsCode.innerHTML = `
+    <div class="line"><span class="ln">1</span><span class="gutter"></span><span class="content tok-c"># Dashboard reads → Rust migration</span></div>
+    <div class="line"><span class="ln">2</span><span class="gutter"></span><span class="content tok-c">> Plan mode · saved · persists across /clear &amp; compaction</span></div>
+    <div class="line"><span class="ln">3</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">4</span><span class="gutter"></span><span class="content tok-c">## Goal</span></div>
+    <div class="line"><span class="ln">5</span><span class="gutter"></span><span class="content">Replace Python <span class="tok-f">read_usage_summary()</span> with Rust, behind a flag, zero downtime.</span></div>
+    <div class="line"><span class="ln">6</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">7</span><span class="gutter"></span><span class="content tok-c">## Phase 1 — Rust reader + types  (2h)</span></div>
+    <div class="line"><span class="ln">8</span><span class="gutter"></span><span class="content"> - Add <span class="tok-t">UsageSummary</span> struct with <span class="tok-f">Serialize</span></span></div>
+    <div class="line"><span class="ln">9</span><span class="gutter"></span><span class="content"> - Implement <span class="tok-f">read_usage_summary(state, account_id)</span> → <span class="tok-s">crates/multica-dashboard/src/reader.rs</span></span></div>
+    <div class="line"><span class="ln">10</span><span class="gutter"></span><span class="content"> - Export from <span class="tok-s">mod.rs</span>; port 5 unit tests</span></div>
+    <div class="line"><span class="ln">11</span><span class="gutter"></span><span class="content tok-p">  accept: cargo test -p multica-dashboard passes</span></div>
+    <div class="line"><span class="ln">12</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">13</span><span class="gutter"></span><span class="content tok-c">## Phase 2 — Feature flag wiring  (30m)</span></div>
+    <div class="line"><span class="ln">14</span><span class="gutter"></span><span class="content"> - Add <span class="tok-p">dashboard_reads_rust</span> (default off) → <span class="tok-s">apps/dashboard/src/feature-flags.ts</span></span></div>
+    <div class="line"><span class="ln">15</span><span class="gutter"></span><span class="content"> - Router picks reader based on flag</span></div>
+    <div class="line"><span class="ln">16</span><span class="gutter"></span><span class="content tok-p">  accept: both paths green in integration tests</span></div>
+    <div class="line"><span class="ln">17</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">18</span><span class="gutter"></span><span class="content tok-c">## Phase 3 — Shadow-read + compare  (24h observe)</span></div>
+    <div class="line"><span class="ln">19</span><span class="gutter"></span><span class="content"> - Dual-fire Python + Rust; log diffs to <span class="tok-s">metrics.dashboard_read_parity</span></span></div>
+    <div class="line"><span class="ln">20</span><span class="gutter"></span><span class="content tok-p">  accept: parity_diff_ratio &lt; 0.001 over 24h</span></div>
+    <div class="line"><span class="ln">21</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">22</span><span class="gutter"></span><span class="content tok-c">## Phase 4 — Cutover + delete Python  (1h)</span></div>
+    <div class="line"><span class="ln">23</span><span class="gutter"></span><span class="content"> - Flip flag to 100%; remove <span class="tok-s">apps/backend/dashboard/reader.py</span></span></div>
+    <div class="line"><span class="ln">24</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">25</span><span class="gutter"></span><span class="content tok-c">## Risks</span></div>
+    <div class="line"><span class="ln">26</span><span class="gutter"></span><span class="content"> - <span class="tok-s">totals_weekly</span> u64 vs bigint coercion → validated in phase 3</span></div>
+    <div class="line"><span class="ln">27</span><span class="gutter"></span><span class="content"> - <span class="tok-s">usage_totals_fast</span> view lag ~5s → acceptable per SLO</span></div>
+    <div class="line"><span class="ln">28</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">29</span><span class="gutter"></span><span class="content tok-c">## Rollback</span></div>
+    <div class="line"><span class="ln">30</span><span class="gutter"></span><span class="content">Flip flag to 0%. Python reader kept until phase 4.</span></div>`;
+}
+
+function openPlanDoc() {
+  // scroll / highlight — already open, just pulse the doc
+  $vsCode.style.transition = 'background 0.3s ease';
+  $vsCode.style.background = 'rgba(200,130,255,0.06)';
+  setTimeout(() => { $vsCode.style.background = ''; }, 800);
+}
+
+function editPlan() {
+  // find the "Phase 4" line and mark it [deferred]; add a new accept line to phase 3
+  const lines = $vsCode.querySelectorAll('.line');
+  lines.forEach(l => {
+    const c = l.querySelector('.content');
+    if (!c) return;
+    if (c.textContent.includes('Phase 4 — Cutover')) {
+      l.classList.add('removed');
+      c.innerHTML = c.innerHTML + ' <span class="tok-s">[deferred]</span>';
+    }
+    if (c.textContent.includes('parity_diff_ratio')) {
+      // insert a new accept line after it
+      const newLine = document.createElement('div');
+      newLine.className = 'line added';
+      newLine.innerHTML = `<span class="ln">+</span><span class="gutter"></span><span class="content tok-p">  accept: 100 concurrent reads &lt; p99 80ms</span>`;
+      l.after(newLine);
+    }
+  });
+}
+
+function revisePlan() {
+  $vsTabs.innerHTML = `<div class="vs-tab"><span class="fico md">MD</span><span>v1.md</span></div><div class="vs-tab active"><span class="fico md" style="color:var(--purple)">MD</span><span>v2.md (revised)</span></div>`;
+  $vsCode.innerHTML = `
+    <div class="line"><span class="ln">1</span><span class="gutter"></span><span class="content tok-c"># Dashboard reads → Rust migration (v2, revised)</span></div>
+    <div class="line"><span class="ln">2</span><span class="gutter"></span><span class="content tok-c">> Drift noted: flag shape changed upstream in main</span></div>
+    <div class="line"><span class="ln">3</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line added"><span class="ln">4</span><span class="gutter"></span><span class="content tok-c">## Phase 2' — Re-wire flag to new shape  (40m)</span></div>
+    <div class="line added"><span class="ln">5</span><span class="gutter"></span><span class="content"> - Migrate to <span class="tok-f">flag({ rollout })</span> constructor</span></div>
+    <div class="line added"><span class="ln">6</span><span class="gutter"></span><span class="content"> - Update 4 call sites introduced in main since v1</span></div>
+    <div class="line"><span class="ln">7</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line"><span class="ln">8</span><span class="gutter"></span><span class="content tok-c">## Phase 3 — unchanged (see v1)</span></div>`;
+}
+
+function approvePhases() {
+  // animate [approve] → [✓ approved] on phases 1-3, reject phase 4
+  const lines = $vsCode.querySelectorAll('.line');
+  [2,3,4].forEach((idx, i) => {
+    setTimeout(() => {
+      const l = lines[idx];
+      if (!l) return;
+      l.classList.add('added');
+      l.innerHTML = l.innerHTML.replace('[approve]', '<span class="tok-f">[✓ approved]</span>');
+    }, i * 350);
+  });
+  setTimeout(() => {
+    const l = lines[5];
+    if (l) { l.classList.add('removed'); l.innerHTML = l.innerHTML.replace('[approve]', '<span style="color:#F14C4C">[✗ skip]</span>'); }
+  }, 1100);
+}
+
+function escalatePlan() {
+  const el = $worktrees.querySelector('[data-wt="wt-plan"]');
+  if (!el) return;
+  el.dataset.readonly = '';
+  const tag = el.querySelector('.tag');
+  if (tag) { tag.innerHTML = 'executing · phase 1'; tag.style.color = 'var(--accent)'; }
+  const msg = el.querySelector('.wt-message');
+  if (msg) msg.textContent = 'Access escalated to On-Request. Writing phase 1.';
+  // add a file to signal a write is happening
+  addFilesToWorktree([
+    { wt: 'wt-plan', path: 'crates/multica-dashboard/src/reader.rs', status: 'U', ext: 'rs' }
+  ]);
+}
+
+// ===== MERGE MODE handlers =====
+function seedTwoPRs() {
+  // Seed two "completed" worktrees sitting as PRs awaiting merge
+  addWorktree({ id: 'wt-pr421', name: 'agent_codex__dashboard-rust-port-421', branch: 'agent/codex/dashboard-rust-port-421' });
+  setTimeout(() => {
+    addFilesToWorktree([
+      { wt: 'wt-pr421', path: 'crates/multica-dashboard/src/reader.rs', status: 'U', ext: 'rs' },
+      { wt: 'wt-pr421', path: 'apps/dashboard/src/feature-flags.ts', status: 'M', ext: 'ts' },
+    ]);
+  }, 300);
+  setTimeout(() => {
+    addWorktree({ id: 'wt-pr438', name: 'agent_codex__flags-cleanup-sweep-438', branch: 'agent/codex/flags-cleanup-sweep-438' });
+  }, 900);
+  setTimeout(() => {
+    addFilesToWorktree([
+      { wt: 'wt-pr438', path: 'apps/dashboard/src/feature-flags.ts', status: 'M', ext: 'ts' },
+      { wt: 'wt-pr438', path: 'apps/dashboard/src/flag-types.ts', status: 'U', ext: 'ts' },
+    ]);
+  }, 1200);
+}
+
+function showConflictState() {
+  // Mark the conflicted file in both worktrees
+  const matches = $worktrees.querySelectorAll('.tree-node');
+  matches.forEach(n => {
+    if (n.dataset.path === 'apps/dashboard/src/feature-flags.ts') {
+      const s = n.querySelector('.status');
+      if (s) { s.textContent = '!'; s.style.color = '#F14C4C'; }
+      n.style.background = 'rgba(241,76,76,0.10)';
+    }
+  });
+  // banner line in the editor tabs
+  $vsTabs.innerHTML = `<div class="vs-tab active" style="color:#F14C4C"><span class="fico ts">TS</span><span>feature-flags.ts (conflict)</span></div>`;
+  $vsCode.innerHTML = `
+    <div class="line"><span class="ln">1</span><span class="gutter"></span><span class="content tok-c">// Conflict: two PRs touched overlapping lines.</span></div>
+    <div class="line"><span class="ln">2</span><span class="gutter"></span><span class="content tok-c">// Normally: you stop, check out both branches, resolve by hand.</span></div>
+    <div class="line"><span class="ln">3</span><span class="gutter"></span><span class="content tok-c">// With merge agent: this resolves automatically.</span></div>`;
+  document.getElementById('status-errors').textContent = '1';
+}
+
+function showConflictDiff() {
+  $vsTabs.innerHTML = `<div class="vs-tab active"><span class="fico ts">TS</span><span>feature-flags.ts &lt;&lt;&lt; conflict</span></div>`;
+  $vsCode.innerHTML = `
+    <div class="line"><span class="ln">1</span><span class="gutter"></span><span class="content"><span class="tok-k">export const </span><span class="tok-p">FLAGS</span> = {</span></div>
+    <div class="line removed"><span class="ln">2</span><span class="gutter"></span><span class="content">&lt;&lt;&lt;&lt;&lt;&lt;&lt; HEAD (PR #421)</span></div>
+    <div class="line added"><span class="ln">3</span><span class="gutter"></span><span class="content">  <span class="tok-p">dashboard_reads_rust</span>: { enabled: <span class="tok-k">false</span>, rollout: <span class="tok-n">0</span> },</span></div>
+    <div class="line removed"><span class="ln">4</span><span class="gutter"></span><span class="content">=======</span></div>
+    <div class="line added"><span class="ln">5</span><span class="gutter"></span><span class="content">  <span class="tok-p">projects_v2_layout</span>: <span class="tok-f">flag</span>({ rollout: <span class="tok-n">25</span> }),</span></div>
+    <div class="line removed"><span class="ln">6</span><span class="gutter"></span><span class="content">&gt;&gt;&gt;&gt;&gt;&gt;&gt; origin/pr-438</span></div>
+    <div class="line"><span class="ln">7</span><span class="gutter"></span><span class="content">};</span></div>`;
+}
+
+function applyResolution() {
+  $vsTabs.innerHTML = `<div class="vs-tab active"><span class="fico ts">TS</span><span>feature-flags.ts ✓ resolved</span></div>`;
+  $vsCode.innerHTML = `
+    <div class="line"><span class="ln">1</span><span class="gutter"></span><span class="content tok-c">// Merge agent resolution — both features preserved.</span></div>
+    <div class="line"><span class="ln">2</span><span class="gutter"></span><span class="content tok-c">// Applied PR #438's flag() shape, then re-added #421's entry.</span></div>
+    <div class="line"><span class="ln">3</span><span class="gutter"></span><span class="content"></span></div>
+    <div class="line added"><span class="ln">4</span><span class="gutter"></span><span class="content"><span class="tok-k">export const </span><span class="tok-p">FLAGS</span> = {</span></div>
+    <div class="line added"><span class="ln">5</span><span class="gutter"></span><span class="content">  <span class="tok-p">dashboard_reads_rust</span>: <span class="tok-f">flag</span>({ rollout: <span class="tok-n">0</span> }),</span></div>
+    <div class="line added"><span class="ln">6</span><span class="gutter"></span><span class="content">  <span class="tok-p">projects_v2_layout</span>: <span class="tok-f">flag</span>({ rollout: <span class="tok-n">25</span> }),</span></div>
+    <div class="line added"><span class="ln">7</span><span class="gutter"></span><span class="content">};</span></div>`;
+  // attach file to merge worktree
+  addFilesToWorktree([
+    { wt: 'wt-merge', path: 'apps/dashboard/src/feature-flags.ts', status: 'M', ext: 'ts' }
+  ]);
+  document.getElementById('status-errors').textContent = '0';
+  // clear conflict flag on source worktrees
+  $worktrees.querySelectorAll('.tree-node').forEach(n => { n.style.background = ''; });
+  showCommitCTA();
+}
+
+function dissolveMerge() {
+  ['wt-pr421', 'wt-pr438', 'wt-merge'].forEach((id, i) => {
+    setTimeout(() => mergeWorktree(id), i * 300);
+  });
+  $statusBranch.textContent = 'dev';
+}
+
+// --- editor ---
+function openFileInEditor(file) {
+  // highlight tabs
+  const existing = $vsTabs.querySelector(`[data-path="${file.path}"]`);
+  if (!existing) {
+    $vsTabs.querySelectorAll('.vs-tab').forEach(t => t.classList.remove('active'));
+    const tab = document.createElement('div');
+    tab.className = 'vs-tab active';
+    tab.dataset.path = file.path;
+    tab.innerHTML = `<span class="fico ${file.ext}" style="color:${file.ext==='rs'?'#CE422B':'#007ACC'}; font-size:10px; font-weight:700">${file.ext.toUpperCase()}</span>
+      <span>${file.path.split('/').pop()}</span>
+      <span class="cl"><svg class="i" style="width:11px;height:11px"><use href="#i-x"/></svg></span>`;
+    $vsTabs.appendChild(tab);
+  } else {
+    $vsTabs.querySelectorAll('.vs-tab').forEach(t => t.classList.remove('active'));
+    existing.classList.add('active');
+  }
+  renderFileContent(file);
+}
+
+const fileContents = {
+  'crates/multica-dashboard/src/reader.rs': {
+    before: [
+      ['tok-c', '// Placeholder — owned by Python until phase 7'],
+      ['', ''],
+      ['tok-k', 'pub fn '], ['tok-f', 'read_usage_summary'], ['', '() {'],
+      ['    ', ''], ['tok-c', '    todo!()'],
+      ['', '}'],
+    ],
+    after: [
+      { type: 'unchanged', parts: [['tok-c', '//! Rust-owned dashboard read path.']] },
+      { type: 'added', parts: [['tok-k', 'use '], ['tok-t', 'crate'], ['', '::{'], ['tok-p', 'state'], ['', ', '], ['tok-p', 'metrics'], ['', '};']] },
+      { type: 'added', parts: [['tok-k', 'use '], ['tok-t', 'serde'], ['', '::{'], ['tok-p', 'Serialize'], ['', '};']] },
+      { type: 'unchanged', parts: [['', '']] },
+      { type: 'added', parts: [['tok-k', '#[derive('], ['tok-t', 'Serialize'], ['', ')]']] },
+      { type: 'added', parts: [['tok-k', 'pub struct '], ['tok-t', 'UsageSummary'], ['', ' {']] },
+      { type: 'added', parts: [['    ', ''], ['tok-k', 'pub '], ['tok-p', 'account_id'], ['', ': '], ['tok-t', 'Uuid'], ['', ',']] },
+      { type: 'added', parts: [['    ', ''], ['tok-k', 'pub '], ['tok-p', 'totals_5h'], ['', ': '], ['tok-t', 'u64'], ['', ',']] },
+      { type: 'added', parts: [['    ', ''], ['tok-k', 'pub '], ['tok-p', 'totals_weekly'], ['', ': '], ['tok-t', 'u64'], ['', ',']] },
+      { type: 'added', parts: [['', '}']] },
+      { type: 'unchanged', parts: [['', '']] },
+      { type: 'removed', parts: [['tok-k', 'pub fn '], ['tok-f', 'read_usage_summary'], ['', '() {']] },
+      { type: 'removed', parts: [['tok-c', '    todo!()']] },
+      { type: 'removed', parts: [['', '}']] },
+      { type: 'added', parts: [['tok-k', 'pub async fn '], ['tok-f', 'read_usage_summary'], ['', '(']] },
+      { type: 'added', parts: [['    ', ''], ['tok-p', 'state'], ['', ': '], ['tok-k', '&'], ['tok-t', 'AppState'], ['', ',']] },
+      { type: 'added', parts: [['    ', ''], ['tok-p', 'account_id'], ['', ': '], ['tok-t', 'Uuid'], ['', ',']] },
+      { type: 'added', parts: [['', ') -> '], ['tok-t', 'Result'], ['', '<'], ['tok-t', 'UsageSummary'], ['', '> {']] },
+      { type: 'added', parts: [['    ', ''], ['tok-k', 'let '], ['tok-p', 'row'], ['', ' = '], ['tok-f', 'sqlx::query_as!'], ['', '(']] },
+      { type: 'added', parts: [['        ', ''], ['tok-t', 'UsageSummary'], ['', ',']] },
+      { type: 'added', parts: [['        ', ''], ['tok-s', '"SELECT * FROM usage_totals_fast WHERE account_id = $1"'], ['', ',']] },
+      { type: 'added', parts: [['        ', ''], ['tok-p', 'account_id']] },
+      { type: 'added', parts: [['    ', ''], ['', ').'], ['tok-f', 'fetch_one'], ['', '('], ['tok-k', '&'], ['tok-p', 'state'], ['', '.'], ['tok-p', 'db'], ['', ').await?;']] },
+      { type: 'added', parts: [['    ', ''], ['tok-f', 'Ok'], ['', '('], ['tok-p', 'row'], ['', ')']] },
+      { type: 'added', parts: [['', '}']] },
+    ]
+  }
+};
+
+function renderFileContent(file, animate=false) {
+  const data = fileContents[file.path] || {
+    before: [['tok-c', '// file preview not implemented']],
+    after: [{ type: 'unchanged', parts: [['tok-c', '// file preview not implemented']] }]
+  };
+  $vsCode.innerHTML = '';
+  const lines = data.after;
+  lines.forEach((ln, i) => {
+    const line = document.createElement('div');
+    line.className = 'line' + (ln.type==='added'?' added':'') + (ln.type==='removed'?' removed':'');
+    line.innerHTML = `<span class="ln">${i+1}</span><span class="gutter"></span><span class="content">${ln.parts.map(p=>`<span class="${p[0]}">${escapeHtml(p[1])}</span>`).join('')}</span>`;
+    $vsCode.appendChild(line);
+  });
+}
+function escapeHtml(s) {
+  return s.replace(/[&<>]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[c]));
+}
+
+function animateTypeDiff() {
+  // show a "typing caret" progression
+  const lines = $vsCode.querySelectorAll('.line.added');
+  lines.forEach((l, i) => {
+    l.style.opacity = '0';
+    l.style.transform = 'translateX(-6px)';
+    l.style.transition = 'opacity 0.25s ease, transform 0.25s ease';
+    setTimeout(() => {
+      l.style.opacity = '1';
+      l.style.transform = '';
+    }, i * 80);
+  });
+}
+
+// --- main step renderer ---
+function renderStep(idx, animate=true) {
+  const step = steps[idx];
+  $ctrlNum.textContent = 'Step ' + String(idx+1).padStart(2,'0');
+  $ctrlLabel.textContent = step.label;
+  $ctrlDesc.innerHTML = step.desc;
+  $topStep.textContent = idx+1;
+  $prevBtn.classList.toggle('disabled', idx === 0);
+  $nextBtn.textContent = idx === steps.length - 1 ? 'Restart demo' : 'Next step →';
+  renderDots();
+
+  if (animate) {
+    (step.chat || []).forEach((m, i) => setTimeout(() => appendMsg(m), i * 300));
+  }
+  if (step.vsAction === 'createWorktree') {
+    setTimeout(() => addWorktree(step.wt), 500);
+  } else if (step.vsAction === 'addFiles') {
+    setTimeout(() => {
+      addFilesToWorktree(step.files);
+      if (step.openFile) {
+        const f = step.files.find(x => x.path === step.openFile) || step.files[0];
+        setTimeout(() => openFileInEditor(f), 1200);
+      }
+    }, 400);
+  } else if (step.vsAction === 'typeDiff') {
+    setTimeout(() => animateTypeDiff(), 200);
+  } else if (step.vsAction === 'showCommit') {
+    setTimeout(() => showCommitCTA(), 300);
+  } else if (step.vsAction === 'mergeWorktree') {
+    setTimeout(() => mergeWorktree(step.wt.id), 800);
+  } else if (step.vsAction === 'planProposal') {
+    setTimeout(() => showPlanProposal(step.wt.id), 500);
+  } else if (step.vsAction === 'openPlanDoc') {
+    setTimeout(() => openPlanDoc(), 200);
+  } else if (step.vsAction === 'editPlan') {
+    setTimeout(() => editPlan(), 400);
+  } else if (step.vsAction === 'revisePlan') {
+    setTimeout(() => revisePlan(), 400);
+  } else if (step.vsAction === 'approvePhases') {
+    setTimeout(() => approvePhases(), 300);
+  } else if (step.vsAction === 'escalatePlan') {
+    setTimeout(() => escalatePlan(), 400);
+  } else if (step.vsAction === 'seedTwoPRs') {
+    setTimeout(() => seedTwoPRs(), 400);
+  } else if (step.vsAction === 'showConflict') {
+    setTimeout(() => showConflictState(), 300);
+  } else if (step.vsAction === 'createMergeWorktree') {
+    setTimeout(() => addWorktree(step.wt, true), 500);
+  } else if (step.vsAction === 'showConflictDiff') {
+    setTimeout(() => showConflictDiff(), 300);
+  } else if (step.vsAction === 'applyResolution') {
+    setTimeout(() => applyResolution(), 300);
+  } else if (step.vsAction === 'dissolveMerge') {
+    setTimeout(() => dissolveMerge(), 800);
+  }
+}
+
+function reset() {
+  cur = 0;
+  $chat.innerHTML = '';
+  $worktrees.innerHTML = '';
+  $vsTabs.innerHTML = '';
+  $vsCode.innerHTML = `<div class="line"><span class="ln">1</span><span class="gutter"></span><span class="content tok-c">// Advance the tutorial to watch an agent</span></div>
+      <div class="line"><span class="ln">2</span><span class="gutter"></span><span class="content tok-c">// spin up a sandbox worktree and edit code.</span></div>`;
+  $actBadge.textContent = '0';
+  $statusBranch.textContent = 'dev';
+  renderStep(0);
+}
+
+function gotoStep(i) {
+  if (i < 0 || i >= steps.length) return;
+  if (i <= cur) {
+    // going back — reset and re-play quickly up to i
+    $chat.innerHTML = '';
+    $worktrees.innerHTML = '';
+    $vsTabs.innerHTML = '';
+    $vsCode.innerHTML = '';
+    $actBadge.textContent = '0';
+    for (let k = 0; k <= i; k++) {
+      cur = k;
+      renderStep(k, true);
+    }
+  } else {
+    for (let k = cur+1; k <= i; k++) {
+      cur = k;
+      renderStep(k, true);
+    }
+  }
+}
+
+$nextBtn.addEventListener('click', () => {
+  if (cur === steps.length - 1) return reset();
+  cur++;
+  renderStep(cur);
+});
+$prevBtn.addEventListener('click', () => {
+  if (cur === 0) return;
+  gotoStep(cur - 1);
+});
+$resetBtn.addEventListener('click', reset);
+
+// --- mode toggle ---
+// hide old overlays — modes now drive both panes via steps
+try { $planOverlay.style.display = 'none'; } catch(e){}
+try { document.getElementById('merge-overlay').style.display = 'none'; } catch(e){}
+
+function setMode(m) {
+  mode = m;
+  steps = m === 'plan' ? planSteps : (m === 'merge' ? mergeSteps : executeSteps);
+  $topTotal.textContent = steps.length;
+  $modeSeg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === m));
+  reset();
+}
+$modeSeg.querySelectorAll('button').forEach(b => {
+  b.addEventListener('click', () => setMode(b.dataset.mode));
+});
+
+// --- init ---
+renderStep(0);
+</script>
+
+</body>
+</html>
