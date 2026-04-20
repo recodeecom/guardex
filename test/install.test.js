@@ -312,6 +312,7 @@ test('setup provisions workflow files and repo config', () => {
     'scripts/review-bot-watch.sh',
     'scripts/agent-worktree-prune.sh',
     'scripts/agent-file-locks.py',
+    'scripts/guardex-env.sh',
     'scripts/install-agent-git-hooks.sh',
     'scripts/openspec/init-plan-workspace.sh',
     'scripts/openspec/init-change-workspace.sh',
@@ -353,6 +354,7 @@ test('setup provisions workflow files and repo config', () => {
 
   const agentsContent = fs.readFileSync(path.join(repoDir, 'AGENTS.md'), 'utf8');
   assert.equal(agentsContent.includes('<!-- multiagent-safety:START -->'), true);
+  assert.match(agentsContent, /GUARDEX_ON=0/);
   assert.match(
     agentsContent,
     /For every new task, including follow-up work in the same chat\/session, if an assigned agent sub-branch\/worktree is already open, continue in that sub-branch/,
@@ -364,6 +366,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.match(gitignoreContent, /scripts\/codex-agent\.sh/);
   assert.match(gitignoreContent, /scripts\/review-bot-watch\.sh/);
   assert.match(gitignoreContent, /scripts\/agent-file-locks\.py/);
+  assert.match(gitignoreContent, /scripts\/guardex-env\.sh/);
   assert.match(gitignoreContent, /scripts\/openspec\/init-change-workspace\.sh/);
   assert.match(gitignoreContent, /\.githooks\/pre-commit/);
   assert.match(gitignoreContent, /\.githooks\/pre-push/);
@@ -383,6 +386,30 @@ test('setup provisions workflow files and repo config', () => {
 
   const secondRun = runNode(['setup', '--target', repoDir], repoDir);
   assert.equal(secondRun.status, 0, secondRun.stderr || secondRun.stdout);
+});
+
+test('setup and doctor skip repo bootstrap when repo .env disables Guardex', () => {
+  const repoDir = initRepo();
+  fs.writeFileSync(path.join(repoDir, '.env'), 'GUARDEX_ON=0\n', 'utf8');
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Guardex is disabled for this repo/);
+  assert.equal(fs.existsSync(path.join(repoDir, 'AGENTS.md')), false);
+  assert.equal(fs.existsSync(path.join(repoDir, 'scripts', 'agent-branch-start.sh')), false);
+  assert.equal(fs.existsSync(path.join(repoDir, '.githooks', 'pre-commit')), false);
+
+  const hooksPath = runCmd('git', ['config', '--get', 'core.hooksPath'], repoDir);
+  assert.notEqual(hooksPath.stdout.trim(), '.githooks');
+
+  result = runNode(['status', '--target', repoDir], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Repo safety service: .*disabled/);
+
+  result = runNode(['doctor', '--target', repoDir], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Repo-local Guardex enforcement is intentionally disabled\./);
+  assert.equal(fs.existsSync(path.join(repoDir, 'AGENTS.md')), false);
 });
 
 test('setup refreshes existing managed AGENTS block by default', () => {
@@ -2456,6 +2483,53 @@ test('pre-push blocks codex protected branch pushes even from VS Code Source Con
   );
   assert.equal(hookResult.status, 1, hookResult.stderr || hookResult.stdout);
   assert.match(hookResult.stderr, /\[guardex-preedit-guard\] Codex push detected toward protected branch\./);
+});
+
+test('repo .env GUARDEX_ON=false disables bootstrap scripts and git hook enforcement', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['commit', '-m', 'apply gx setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  fs.writeFileSync(path.join(repoDir, '.env'), 'GUARDEX_ON=false\n', 'utf8');
+
+  result = runCmd('bash', ['scripts/agent-branch-start.sh', 'disabled-toggle', 'bot', 'dev'], repoDir);
+  assert.notEqual(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stderr, /Guardex is disabled for this repo/);
+
+  const preCommitResult = runCmd('bash', ['.githooks/pre-commit'], repoDir, {
+    CODEX_THREAD_ID: 'test-thread',
+  });
+  assert.equal(preCommitResult.status, 0, preCommitResult.stderr || preCommitResult.stdout);
+
+  const prePushResult = runCmd(
+    'bash',
+    [
+      '-lc',
+      `printf '%s\\n' 'refs/heads/dev 1111111111111111111111111111111111111111 refs/heads/dev 0000000000000000000000000000000000000000' | .githooks/pre-push origin origin`,
+    ],
+    repoDir,
+    {
+      CODEX_THREAD_ID: 'test-thread',
+    },
+  );
+  assert.equal(prePushResult.status, 0, prePushResult.stderr || prePushResult.stdout);
+
+  const checkoutResult = runCmd(
+    'git',
+    ['checkout', '-b', 'feature/guardex-off'],
+    repoDir,
+    { CODEX_THREAD_ID: 'test-thread' },
+  );
+  assert.equal(checkoutResult.status, 0, checkoutResult.stderr || checkoutResult.stdout);
+  const currentBranch = runCmd('git', ['rev-parse', '--abbrev-ref', 'HEAD'], repoDir);
+  assert.equal(currentBranch.stdout.trim(), 'feature/guardex-off');
 });
 
 test('post-merge auto-runs cleanup on base branch and skips non-base branches', () => {

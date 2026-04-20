@@ -12,6 +12,13 @@ When writing complex features or significant refactors, use an ExecPlan (as desc
 - GitHub auth for git/API is available via env vars: `GITHUB_USER`, `GITHUB_TOKEN` (PAT). Do not hardcode or commit tokens.
 - For authenticated git over HTTPS in automation, use: `https://x-access-token:${GITHUB_TOKEN}@github.com/<owner>/<repo>.git`
 
+## Guardex Toggle
+
+- Guardex is enabled for this repo by default.
+- If the repo root `.env` sets `GUARDEX_ON=0`, `false`, `no`, or `off`, treat every Guardex-managed workflow requirement in this file as disabled for that repo.
+- Disabled mode means: no required Guardex worktrees, no required Guardex lock-claim flow, no required Guardex PR/cleanup flow, and no required OpenSpec workflow from this contract until `GUARDEX_ON` is set back to a truthy value.
+- `GUARDEX_ON=1`, `true`, `yes`, or `on` explicitly re-enables the Guardex workflow.
+
 ## Code Conventions
 
 The `/project-conventions` skill is auto-activated on code edits (PreToolUse guard).
@@ -40,7 +47,7 @@ The `/project-conventions` skill is auto-activated on code edits (PreToolUse gua
 
 ## Claude Code Workflow
 
-Claude Code sessions use the same agent-worktree + OpenSpec flow as Codex; there is no separate `claude-agent.sh` wrapper — Claude calls the generic scripts directly.
+When Guardex is enabled, Claude Code sessions use the same agent-worktree + OpenSpec flow as Codex; there is no separate `claude-agent.sh` wrapper — Claude calls the generic scripts directly.
 
 ### Tiering (token-aware scaffolding)
 
@@ -153,7 +160,7 @@ Apply these repo-specific supplements in addition to that canonical contract:
 
 ## Workflow (OpenSpec-first)
 
-This repo uses **OpenSpec as the primary workflow and SSOT** for change-driven development.
+When Guardex is enabled, this repo uses **OpenSpec as the primary workflow and SSOT** for change-driven development.
 
 ### OpenSpec philosophy (enforced)
 
@@ -244,6 +251,8 @@ scripts/openspec/init-plan-workspace.sh <plan-slug>
 
 <!-- multiagent-safety:START -->
 ## Multi-Agent Safety Contract
+
+**Repo toggle.** Guardex is enabled by default. If the repo root `.env` sets `GUARDEX_ON=0`, `false`, `no`, or `off`, treat this entire Guardex contract as disabled for the repo and do not require Guardex worktrees, lock claims, completion flow, or OpenSpec workflow until `GUARDEX_ON` is re-enabled.
 
 **Isolation.** Every task runs on a dedicated `agent/*` branch + worktree. Start with `scripts/agent-branch-start.sh "<task>" "<agent-name>"`. Treat the base branch (`main`/`dev`) as read-only while an agent branch is active. Never `git checkout <branch>` on a primary working tree (including nested repos); use `git worktree add` instead. The `.githooks/post-checkout` hook auto-reverts primary-branch switches during agent sessions — bypass only with `GUARDEX_ALLOW_PRIMARY_BRANCH_SWITCH=1`.
 

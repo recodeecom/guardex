@@ -35,6 +35,7 @@ const SCORECARD_BIN = process.env.GUARDEX_SCORECARD_BIN || 'scorecard';
 const GIT_PROTECTED_BRANCHES_KEY = 'multiagent.protectedBranches';
 const GIT_BASE_BRANCH_KEY = 'multiagent.baseBranch';
 const GIT_SYNC_STRATEGY_KEY = 'multiagent.sync.strategy';
+const GUARDEX_REPO_TOGGLE_ENV = 'GUARDEX_ON';
 const DEFAULT_PROTECTED_BRANCHES = ['dev', 'main', 'master'];
 const DEFAULT_BASE_BRANCH = 'dev';
 const DEFAULT_SYNC_STRATEGY = 'rebase';
@@ -49,6 +50,7 @@ const TEMPLATE_FILES = [
   'scripts/review-bot-watch.sh',
   'scripts/agent-worktree-prune.sh',
   'scripts/agent-file-locks.py',
+  'scripts/guardex-env.sh',
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
   'scripts/openspec/init-change-workspace.sh',
@@ -68,6 +70,7 @@ const REQUIRED_WORKFLOW_FILES = [
   'scripts/agent-branch-finish.sh',
   'scripts/agent-worktree-prune.sh',
   'scripts/agent-file-locks.py',
+  'scripts/guardex-env.sh',
   'scripts/install-agent-git-hooks.sh',
   '.githooks/pre-commit',
   '.githooks/post-merge',
@@ -113,6 +116,7 @@ const CRITICAL_GUARDRAIL_PATHS = new Set([
   'scripts/agent-worktree-prune.sh',
   'scripts/codex-agent.sh',
   'scripts/agent-file-locks.py',
+  'scripts/guardex-env.sh',
 ]);
 
 const LOCK_FILE_RELATIVE = '.omx/state/agent-file-locks.json';
@@ -130,6 +134,7 @@ const MANAGED_GITIGNORE_PATHS = [
   'scripts/review-bot-watch.sh',
   'scripts/agent-worktree-prune.sh',
   'scripts/agent-file-locks.py',
+  'scripts/guardex-env.sh',
   'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
   'scripts/openspec/init-change-workspace.sh',
@@ -288,6 +293,9 @@ function statusDot(status) {
   }
   if (status === 'inactive') {
     return colorize('●', '31'); // red
+  }
+  if (status === 'disabled') {
+    return colorize('●', '36'); // cyan
   }
   return colorize('●', '33'); // yellow for degraded/unknown
 }
@@ -3151,6 +3159,75 @@ function parseAutoApproval(name) {
   return null;
 }
 
+function parseBooleanLike(raw) {
+  if (raw == null) return null;
+  const normalized = String(raw).trim().toLowerCase();
+  if (!normalized) return null;
+  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
+  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
+  return null;
+}
+
+function parseDotenvAssignmentValue(raw) {
+  let value = String(raw || '').trim();
+  if (!value) return '';
+  if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith('\'') && value.endsWith('\''))) {
+    return value.slice(1, -1).trim();
+  }
+  value = value.replace(/\s+#.*$/, '').trim();
+  return value;
+}
+
+function readRepoDotenvValue(repoRoot, name) {
+  const envPath = path.join(repoRoot, '.env');
+  if (!fs.existsSync(envPath)) return null;
+  const pattern = new RegExp(`^\\s*(?:export\\s+)?${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*=\\s*(.*)$`);
+  const lines = fs.readFileSync(envPath, 'utf8').split(/\r?\n/);
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const match = line.match(pattern);
+    if (!match) continue;
+    return parseDotenvAssignmentValue(match[1]);
+  }
+  return null;
+}
+
+function resolveGuardexRepoToggle(repoRoot, env = process.env) {
+  const envRaw = env[GUARDEX_REPO_TOGGLE_ENV];
+  const envEnabled = parseBooleanLike(envRaw);
+  if (envEnabled !== null) {
+    return {
+      enabled: envEnabled,
+      source: 'process environment',
+      raw: String(envRaw).trim(),
+    };
+  }
+
+  const dotenvRaw = readRepoDotenvValue(repoRoot, GUARDEX_REPO_TOGGLE_ENV);
+  const dotenvEnabled = parseBooleanLike(dotenvRaw);
+  if (dotenvEnabled !== null) {
+    return {
+      enabled: dotenvEnabled,
+      source: 'repo .env',
+      raw: String(dotenvRaw).trim(),
+    };
+  }
+
+  return {
+    enabled: true,
+    source: 'default',
+    raw: '',
+  };
+}
+
+function describeGuardexRepoToggle(toggle) {
+  if (!toggle || toggle.source === 'default') {
+    return 'default enabled mode';
+  }
+  return `${toggle.source} (${GUARDEX_REPO_TOGGLE_ENV}=${toggle.raw})`;
+}
+
 function parseVersionString(version) {
   const match = String(version || '').trim().match(/^v?(\d+)\.(\d+)\.(\d+)/);
   if (!match) return null;
@@ -3601,6 +3678,22 @@ function findStaleLockPaths(repoRoot, locks) {
 
 function runInstallInternal(options) {
   const repoRoot = resolveRepoRoot(options.target);
+  const guardexToggle = resolveGuardexRepoToggle(repoRoot);
+  if (!guardexToggle.enabled) {
+    return {
+      repoRoot,
+      operations: [
+        {
+          status: 'skipped',
+          file: '.env',
+          note: `Guardex disabled by ${describeGuardexRepoToggle(guardexToggle)}`,
+        },
+      ],
+      hookResult: { status: 'skipped', key: 'core.hooksPath', value: '(unchanged)' },
+      guardexEnabled: false,
+      guardexToggle,
+    };
+  }
   const operations = [];
 
   operations.push(...ensureOmxScaffold(repoRoot, Boolean(options.dryRun)));
@@ -3624,11 +3717,27 @@ function runInstallInternal(options) {
 
   const hookResult = configureHooks(repoRoot, Boolean(options.dryRun));
 
-  return { repoRoot, operations, hookResult };
+  return { repoRoot, operations, hookResult, guardexEnabled: true, guardexToggle };
 }
 
 function runFixInternal(options) {
   const repoRoot = resolveRepoRoot(options.target);
+  const guardexToggle = resolveGuardexRepoToggle(repoRoot);
+  if (!guardexToggle.enabled) {
+    return {
+      repoRoot,
+      operations: [
+        {
+          status: 'skipped',
+          file: '.env',
+          note: `Guardex disabled by ${describeGuardexRepoToggle(guardexToggle)}`,
+        },
+      ],
+      hookResult: { status: 'skipped', key: 'core.hooksPath', value: '(unchanged)' },
+      guardexEnabled: false,
+      guardexToggle,
+    };
+  }
   const operations = [];
 
   operations.push(...ensureOmxScaffold(repoRoot, Boolean(options.dryRun)));
@@ -3678,11 +3787,25 @@ function runFixInternal(options) {
 
   const hookResult = configureHooks(repoRoot, Boolean(options.dryRun));
 
-  return { repoRoot, operations, hookResult };
+  return { repoRoot, operations, hookResult, guardexEnabled: true, guardexToggle };
 }
 
 function runScanInternal(options) {
   const repoRoot = resolveRepoRoot(options.target);
+  const guardexToggle = resolveGuardexRepoToggle(repoRoot);
+  const currentBranchResult = gitRun(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'], { allowFailure: true });
+  const branch = currentBranchResult.status === 0 ? currentBranchResult.stdout.trim() : '(unknown)';
+  if (!guardexToggle.enabled) {
+    return {
+      repoRoot,
+      branch,
+      findings: [],
+      errors: 0,
+      warnings: 0,
+      guardexEnabled: false,
+      guardexToggle,
+    };
+  }
   const findings = [];
 
   const requiredPaths = [
@@ -3773,15 +3896,14 @@ function runScanInternal(options) {
   const errors = findings.filter((item) => item.level === 'error');
   const warnings = findings.filter((item) => item.level === 'warn');
 
-  const currentBranchResult = gitRun(repoRoot, ['rev-parse', '--abbrev-ref', 'HEAD'], { allowFailure: true });
-  const branch = currentBranchResult.status === 0 ? currentBranchResult.stdout.trim() : '(unknown)';
-
   return {
     repoRoot,
     branch,
     findings,
     errors: errors.length,
     warnings: warnings.length,
+    guardexEnabled: true,
+    guardexToggle,
   };
 }
 
@@ -3807,6 +3929,8 @@ function printScanResult(scan, json = false) {
         {
           repoRoot: scan.repoRoot,
           branch: scan.branch,
+          guardexEnabled: scan.guardexEnabled !== false,
+          guardexToggle: scan.guardexToggle || null,
           errors: scan.errors,
           warnings: scan.warnings,
           findings: scan.findings,
@@ -3821,6 +3945,13 @@ function printScanResult(scan, json = false) {
   console.log(`[${TOOL_NAME}] Scan target: ${scan.repoRoot}`);
   console.log(`[${TOOL_NAME}] Branch: ${scan.branch}`);
 
+  if (scan.guardexEnabled === false) {
+    console.log(
+      `[${TOOL_NAME}] Guardex is disabled for this repo (${describeGuardexRepoToggle(scan.guardexToggle)}).`,
+    );
+    return;
+  }
+
   if (scan.findings.length === 0) {
     console.log(`[${TOOL_NAME}] ✅ No safety issues detected.`);
     return;
@@ -3834,6 +3965,10 @@ function printScanResult(scan, json = false) {
 }
 
 function setExitCodeFromScan(scan) {
+  if (scan.guardexEnabled === false) {
+    process.exitCode = 0;
+    return;
+  }
   if (scan.errors > 0) {
     process.exitCode = 2;
     return;
@@ -3875,7 +4010,9 @@ function status(rawArgs) {
   const inGitRepo = isGitRepo(targetPath);
   const scanResult = inGitRepo ? runScanInternal({ target: targetPath, json: false }) : null;
   const repoServiceStatus = scanResult
-    ? (scanResult.errors === 0 && scanResult.warnings === 0 ? 'active' : 'degraded')
+    ? (scanResult.guardexEnabled === false
+      ? 'disabled'
+      : (scanResult.errors === 0 && scanResult.warnings === 0 ? 'active' : 'degraded'))
     : 'inactive';
 
   const payload = {
@@ -3889,6 +4026,8 @@ function status(rawArgs) {
       target: targetPath,
       inGitRepo,
       serviceStatus: repoServiceStatus,
+      guardexEnabled: scanResult ? scanResult.guardexEnabled !== false : null,
+      guardexToggle: scanResult ? scanResult.guardexToggle || null : null,
       scan: scanResult
         ? {
           repoRoot: scanResult.repoRoot,
@@ -3938,6 +4077,17 @@ function status(rawArgs) {
     return;
   }
 
+  if (scanResult.guardexEnabled === false) {
+    console.log(
+      `[${TOOL_NAME}] Repo safety service: ${statusDot('disabled')} disabled (${describeGuardexRepoToggle(scanResult.guardexToggle)}).`,
+    );
+    console.log(`[${TOOL_NAME}] Repo: ${scanResult.repoRoot}`);
+    console.log(`[${TOOL_NAME}] Branch: ${scanResult.branch}`);
+    printToolLogsSummary();
+    process.exitCode = 0;
+    return;
+  }
+
   if (scanResult.errors === 0 && scanResult.warnings === 0) {
     console.log(`[${TOOL_NAME}] Repo safety service: ${statusDot('active')} active.`);
   } else if (scanResult.errors === 0) {
@@ -3979,6 +4129,13 @@ function install(rawArgs) {
   printOperations('Install target', payload, options.dryRun);
 
   if (!options.dryRun) {
+    if (payload.guardexEnabled === false) {
+      console.log(
+        `[${TOOL_NAME}] Guardex is disabled for this repo (${describeGuardexRepoToggle(payload.guardexToggle)}). Skipping repo bootstrap.`,
+      );
+      process.exitCode = 0;
+      return;
+    }
     if (!options.skipAgents) {
       console.log(`[${TOOL_NAME}] AGENTS.md managed policy block is configured by install.`);
     }
@@ -4004,6 +4161,13 @@ function fix(rawArgs) {
   printOperations('Fix target', payload, options.dryRun);
 
   if (!options.dryRun) {
+    if (payload.guardexEnabled === false) {
+      console.log(
+        `[${TOOL_NAME}] Guardex is disabled for this repo (${describeGuardexRepoToggle(payload.guardexToggle)}). Skipping repo repair.`,
+      );
+      process.exitCode = 0;
+      return;
+    }
     console.log(`[${TOOL_NAME}] Repair complete. Next step: ${TOOL_NAME} scan`);
   }
 
@@ -4043,11 +4207,20 @@ function doctor(rawArgs) {
   const fixPayload = runFixInternal(options);
   const scanResult = runScanInternal({ target: options.target, json: false });
   const currentBaseBranch = currentBranchName(scanResult.repoRoot);
-  const autoFinishSummary = autoFinishReadyAgentBranches(scanResult.repoRoot, {
-    baseBranch: currentBaseBranch,
-    dryRun: options.dryRun,
-  });
-  const safe = scanResult.errors === 0 && scanResult.warnings === 0;
+  const autoFinishSummary = scanResult.guardexEnabled === false
+    ? {
+      enabled: false,
+      attempted: 0,
+      completed: 0,
+      skipped: 0,
+      failed: 0,
+      details: [],
+    }
+    : autoFinishReadyAgentBranches(scanResult.repoRoot, {
+      baseBranch: currentBaseBranch,
+      dryRun: options.dryRun,
+    });
+  const safe = scanResult.guardexEnabled === false || (scanResult.errors === 0 && scanResult.warnings === 0);
   const musafe = safe;
 
   if (options.json) {
@@ -4064,6 +4237,8 @@ function doctor(rawArgs) {
             dryRun: Boolean(options.dryRun),
           },
           scan: {
+            guardexEnabled: scanResult.guardexEnabled !== false,
+            guardexToggle: scanResult.guardexToggle || null,
             errors: scanResult.errors,
             warnings: scanResult.warnings,
             findings: scanResult.findings,
@@ -4080,6 +4255,11 @@ function doctor(rawArgs) {
 
   printOperations('Doctor/fix', fixPayload, options.dryRun);
   printScanResult(scanResult, false);
+  if (scanResult.guardexEnabled === false) {
+    console.log(`[${TOOL_NAME}] Repo-local Guardex enforcement is intentionally disabled.`);
+    setExitCodeFromScan(scanResult);
+    return;
+  }
   if (autoFinishSummary.enabled) {
     console.log(
       `[${TOOL_NAME}] Auto-finish sweep (base=${currentBaseBranch}): attempted=${autoFinishSummary.attempted}, completed=${autoFinishSummary.completed}, skipped=${autoFinishSummary.skipped}, failed=${autoFinishSummary.failed}`,
@@ -4821,6 +5001,7 @@ function initWorkspace(rawArgs) {
 function doctorAudit(rawArgs) {
   const options = parseDoctorArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
+  const guardexToggle = resolveGuardexRepoToggle(repoRoot);
   const failures = [];
   const warnings = [];
 
@@ -4837,6 +5018,13 @@ function doctorAudit(rawArgs) {
   }
 
   console.log(`[multiagent-safety] doctor target: ${repoRoot}`);
+  if (!guardexToggle.enabled) {
+    console.log(
+      `[multiagent-safety] Guardex is disabled for this repo (${describeGuardexRepoToggle(guardexToggle)}).`,
+    );
+    console.log('[multiagent-safety] doctor passed.');
+    return;
+  }
 
   const hooksPath = run('git', ['-C', repoRoot, 'config', '--get', 'core.hooksPath']);
   if (hooksPath.status !== 0) {

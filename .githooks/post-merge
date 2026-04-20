@@ -9,6 +9,14 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
 if [[ -z "$repo_root" ]]; then
   exit 0
 fi
+guardex_env_helper="${repo_root}/scripts/guardex-env.sh"
+if [[ -f "$guardex_env_helper" ]]; then
+  # shellcheck source=/dev/null
+  source "$guardex_env_helper"
+fi
+if declare -F guardex_repo_is_enabled >/dev/null 2>&1 && ! guardex_repo_is_enabled "$repo_root"; then
+  exit 0
+fi
 
 branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
 if [[ -z "$branch" || "$branch" == "HEAD" ]]; then

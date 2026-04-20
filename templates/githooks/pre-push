@@ -5,6 +5,19 @@ if [[ "${ALLOW_PUSH_ON_PROTECTED_BRANCH:-0}" == "1" || "${ALLOW_COMMIT_ON_PROTEC
   exit 0
 fi
 
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [[ -z "$repo_root" ]]; then
+  exit 0
+fi
+guardex_env_helper="${repo_root}/scripts/guardex-env.sh"
+if [[ -f "$guardex_env_helper" ]]; then
+  # shellcheck source=/dev/null
+  source "$guardex_env_helper"
+fi
+if declare -F guardex_repo_is_enabled >/dev/null 2>&1 && ! guardex_repo_is_enabled "$repo_root"; then
+  exit 0
+fi
+
 is_vscode_git_context=0
 if [[ -n "${VSCODE_GIT_IPC_HANDLE:-}" || -n "${VSCODE_GIT_ASKPASS_NODE:-}" || -n "${VSCODE_IPC_HOOK_CLI:-}" ]]; then
   is_vscode_git_context=1

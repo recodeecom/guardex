@@ -127,6 +127,52 @@ def resolve_repo_root(file_path: str, cwd: str) -> Path:
     return Path.cwd()
 
 
+def normalize_guardex_toggle(raw: str | None) -> bool | None:
+    if raw is None:
+        return None
+    normalized = raw.strip().lower()
+    if not normalized:
+        return None
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return None
+
+
+def read_repo_dotenv_var(repo_root: Path, name: str) -> str | None:
+    env_path = repo_root / ".env"
+    if not env_path.exists():
+        return None
+    pattern = re.compile(rf"^\s*(?:export\s+)?{re.escape(name)}\s*=\s*(.*)$")
+    try:
+        lines = env_path.read_text(errors="ignore").splitlines()
+    except OSError:
+        return None
+    for line in lines:
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        match = pattern.match(line)
+        if not match:
+            continue
+        value = re.sub(r"\s+#.*$", "", match.group(1)).strip()
+        if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+            value = value[1:-1]
+        return value
+    return None
+
+
+def guardex_repo_is_enabled(repo_root: Path) -> bool:
+    env_value = normalize_guardex_toggle(os.environ.get("GUARDEX_ON"))
+    if env_value is not None:
+        return env_value
+    dotenv_value = normalize_guardex_toggle(read_repo_dotenv_var(repo_root, "GUARDEX_ON"))
+    if dotenv_value is not None:
+        return dotenv_value
+    return True
+
+
 def current_branch(repo_root: Path) -> str:
     try:
         result = subprocess.run(
@@ -448,6 +494,8 @@ def main() -> None:
     file_path = tool_input.get("file_path", "")
     cwd = input_data.get("cwd", "")
     repo_root = resolve_repo_root(file_path, cwd)
+    if not guardex_repo_is_enabled(repo_root):
+        sys.exit(0)
 
     shell_command = extract_shell_command(tool_input)
     shell_command_error = ensure_non_agent_shell_command_allowed(repo_root, shell_command)

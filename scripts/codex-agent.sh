@@ -130,6 +130,23 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 repo_root="$(git rev-parse --show-toplevel)"
 
+guardex_env_helper="${repo_root}/scripts/guardex-env.sh"
+if [[ -f "$guardex_env_helper" ]]; then
+  # shellcheck source=/dev/null
+  source "$guardex_env_helper"
+fi
+if declare -F guardex_repo_is_enabled >/dev/null 2>&1 && ! guardex_repo_is_enabled "$repo_root"; then
+  toggle_source="$(guardex_repo_toggle_source "$repo_root" || true)"
+  toggle_raw="$(guardex_repo_toggle_raw "$repo_root" || true)"
+  if [[ -n "$toggle_source" && -n "$toggle_raw" ]]; then
+    echo "[codex-agent] Guardex is disabled for this repo (${toggle_source}: GUARDEX_ON=${toggle_raw})." >&2
+  else
+    echo "[codex-agent] Guardex is disabled for this repo." >&2
+  fi
+  echo "[codex-agent] Skip Guardex sandbox flow or re-enable with GUARDEX_ON=1." >&2
+  exit 1
+fi
+
 sanitize_slug() {
   local raw="$1"
   local fallback="${2:-task}"

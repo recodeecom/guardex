@@ -389,6 +389,23 @@ fi
 
 repo_root="$(git rev-parse --show-toplevel)"
 
+guardex_env_helper="${repo_root}/scripts/guardex-env.sh"
+if [[ -f "$guardex_env_helper" ]]; then
+  # shellcheck source=/dev/null
+  source "$guardex_env_helper"
+fi
+if declare -F guardex_repo_is_enabled >/dev/null 2>&1 && ! guardex_repo_is_enabled "$repo_root"; then
+  toggle_source="$(guardex_repo_toggle_source "$repo_root" || true)"
+  toggle_raw="$(guardex_repo_toggle_raw "$repo_root" || true)"
+  if [[ -n "$toggle_source" && -n "$toggle_raw" ]]; then
+    echo "[agent-branch-start] Guardex is disabled for this repo (${toggle_source}: GUARDEX_ON=${toggle_raw})." >&2
+  else
+    echo "[agent-branch-start] Guardex is disabled for this repo." >&2
+  fi
+  echo "[agent-branch-start] Skip Guardex worktree/OpenSpec flow or re-enable with GUARDEX_ON=1." >&2
+  exit 1
+fi
+
 if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 && -z "$BASE_BRANCH" ]]; then
   echo "[agent-branch-start] --base requires a non-empty branch name." >&2
   exit 1
