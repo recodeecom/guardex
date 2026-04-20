@@ -412,6 +412,11 @@ npm pack --dry-run
 
 ## Release notes
 
+### v7.0.7
+
+- **Fixed: next publish target now advances past npm.** Bumped `@imdeadpool/guardex` from `7.0.6` to `7.0.7` so the next `npm publish` does not collide with the already-published registry version.
+- **Fixed: root package metadata drift in `package-lock.json`.** The lockfile root version had fallen behind the package manifest (`7.0.4` vs. `7.0.6`), which made release metadata inconsistent. The bump resynchronized `package.json` and `package-lock.json` on `7.0.7`.
+
 ### v7.0.6
 
 - **Fixed: self-updater lied about success.** `gx`'s update prompt runs `npm i -g @imdeadpool/guardex@latest` and previously trusted npm's exit code. When npm's resolution cache made it report "changed 1 package" without actually overwriting the files (a known quirk triggered when the user just bumped from N-1 → N in the same session, or with a warm metadata cache), the prompt kept re-firing on every subsequent `gx` invocation because the on-disk `package.json` was still stale. `gx` now re-reads the globally installed `package.json` after the `@latest` install returns, compares its `version` field to the advertised latest, and if they don't match runs a pinned retry `npm i -g @imdeadpool/guardex@<latest>` to force the cache past the obstructing entry. If the pinned retry also fails to advance the on-disk version, the user gets a clear hint (`npm root -g && npm cache verify`) instead of a silent loop.
