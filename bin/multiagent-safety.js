@@ -3265,7 +3265,69 @@ function maybeSelfUpdateBeforeStatus() {
     return;
   }
 
+  // Verify the install actually advanced the on-disk version. npm sometimes
+  // reports "changed 1 package" with status 0 while leaving the old files
+  // in place (version resolution cache / dedupe quirks). If the installed
+  // version doesn't match check.latest, retry with the pinned version so
+  // npm bypasses whatever heuristic made it skip the upgrade.
+  const postInstallVersion = readInstalledGuardexVersion();
+  if (postInstallVersion != null && postInstallVersion !== check.latest) {
+    console.log(
+      `[${TOOL_NAME}] Installed version is still ${postInstallVersion} (expected ${check.latest}). ` +
+        `Retrying with pinned version ${check.latest}…`,
+    );
+    const pinnedResult = run(
+      NPM_BIN,
+      ['i', '-g', `${packageJson.name}@${check.latest}`],
+      { stdio: 'inherit' },
+    );
+    if (pinnedResult.status !== 0) {
+      console.log(
+        `[${TOOL_NAME}] ⚠️ Pinned retry failed. Run manually: ${NPM_BIN} i -g ${packageJson.name}@${check.latest}`,
+      );
+      return;
+    }
+    const pinnedVersion = readInstalledGuardexVersion();
+    if (pinnedVersion != null && pinnedVersion !== check.latest) {
+      console.log(
+        `[${TOOL_NAME}] ⚠️ On-disk version still ${pinnedVersion} after pinned retry. ` +
+          `Investigate: ${NPM_BIN} root -g && ${NPM_BIN} cache verify`,
+      );
+      return;
+    }
+  }
+
   console.log(`[${TOOL_NAME}] ✅ Updated to latest published version.`);
+}
+
+function readInstalledGuardexVersion() {
+  // Resolves the globally-installed package's on-disk version so we can
+  // verify npm actually wrote new bytes. Uses `npm root -g` to locate the
+  // global install root so we don't accidentally read the running source
+  // tree (which is the file the CLI was spawned from — that IS the global
+  // copy in the normal case, but a bump should be visible via a fresh read
+  // either way). Returns null if we can't determine it.
+  try {
+    const rootResult = run(NPM_BIN, ['root', '-g'], { timeout: 5000 });
+    if (rootResult.status !== 0) {
+      return null;
+    }
+    const globalRoot = String(rootResult.stdout || '').trim();
+    if (!globalRoot) {
+      return null;
+    }
+    const installedPkgPath = path.join(globalRoot, packageJson.name, 'package.json');
+    if (!fs.existsSync(installedPkgPath)) {
+      return null;
+    }
+    const parsed = JSON.parse(fs.readFileSync(installedPkgPath, 'utf8'));
+    if (parsed && typeof parsed.version === 'string') {
+      return parsed.version;
+    }
+  } catch (error) {
+    return null;
+  }
+  return null;
 }
 
 function checkForOpenSpecPackageUpdate() {

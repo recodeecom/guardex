@@ -1971,6 +1971,61 @@ exit 1
   assert.equal(fs.existsSync(markerPath), true, 'expected self-update command to run');
 });
 
+test('self-update verifies on-disk version after @latest install and retries with pinned version when stale', () => {
+  const repoDir = initRepo();
+  const fakeGlobalRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-fake-global-root-'));
+  const installedPkgDir = path.join(fakeGlobalRoot, '@imdeadpool', 'guardex');
+  fs.mkdirSync(installedPkgDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(installedPkgDir, 'package.json'),
+    JSON.stringify({ name: '@imdeadpool/guardex', version: cliVersion }),
+    'utf8',
+  );
+  const markerLatest = path.join(repoDir, '.npm-at-latest-called');
+  const markerPinned = path.join(repoDir, '.npm-at-pinned-called');
+  const fakeNpm = createFakeNpmScript(`
+if [[ "$1" == "view" ]]; then
+  echo '"9.9.9"'
+  exit 0
+fi
+if [[ "$1" == "list" ]]; then
+  echo '{"dependencies":{"oh-my-codex":{},"@fission-ai/openspec":{}}}'
+  exit 0
+fi
+if [[ "$1" == "root" && "$2" == "-g" ]]; then
+  echo "${fakeGlobalRoot}"
+  exit 0
+fi
+if [[ "$1" == "i" && "$2" == "-g" && "$3" == "@imdeadpool/guardex@latest" ]]; then
+  touch "${markerLatest}"
+  # Simulate the npm quirk: report success without rewriting the on-disk package.json.
+  exit 0
+fi
+if [[ "$1" == "i" && "$2" == "-g" && "$3" == "@imdeadpool/guardex@9.9.9" ]]; then
+  touch "${markerPinned}"
+  # Pinned retry actually advances the on-disk version.
+  printf '%s' '{"name":"@imdeadpool/guardex","version":"9.9.9"}' > "${installedPkgDir}/package.json"
+  exit 0
+fi
+echo "unexpected npm args: $*" >&2
+exit 1
+`);
+
+  const result = runNodeWithEnv([], repoDir, {
+    GUARDEX_NPM_BIN: fakeNpm,
+    GUARDEX_FORCE_UPDATE_CHECK: '1',
+    GUARDEX_AUTO_UPDATE_APPROVAL: 'yes',
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /UPDATE AVAILABLE/);
+  assert.match(result.stdout, new RegExp(`Installed version is still ${escapeRegexLiteral(cliVersion)}`));
+  assert.match(result.stdout, /Retrying with pinned version 9\.9\.9/);
+  assert.match(result.stdout, /Updated to latest published version/);
+  assert.equal(fs.existsSync(markerLatest), true, 'expected @latest install to be attempted');
+  assert.equal(fs.existsSync(markerPinned), true, 'expected pinned retry to run when stale');
+});
+
 test('self-update prompt requires explicit y/n when approval is not preconfigured', () => {
   const source = fs.readFileSync(cliPath, 'utf8');
   assert.match(

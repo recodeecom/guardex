@@ -373,6 +373,10 @@ npm pack --dry-run
 
 ## Release notes
 
+### v7.0.6
+
+- **Fixed: self-updater lied about success.** `gx`'s update prompt runs `npm i -g @imdeadpool/guardex@latest` and previously trusted npm's exit code. When npm's resolution cache made it report "changed 1 package" without actually overwriting the files (a known quirk triggered when the user just bumped from N-1 → N in the same session, or with a warm metadata cache), the prompt kept re-firing on every subsequent `gx` invocation because the on-disk `package.json` was still stale. `gx` now re-reads the globally installed `package.json` after the `@latest` install returns, compares its `version` field to the advertised latest, and if they don't match runs a pinned retry `npm i -g @imdeadpool/guardex@<latest>` to force the cache past the obstructing entry. If the pinned retry also fails to advance the on-disk version, the user gets a clear hint (`npm root -g && npm cache verify`) instead of a silent loop.
+
 ### v7.0.5
 
 - **Added: `oh-my-claude` to `gx status` global-toolchain check.** The Claude-side mirror of `oh-my-codex` is now reported alongside the existing services (`oh-my-codex`, `@fission-ai/openspec`, `@imdeadpool/codex-account-switcher`, `gh`). Users who have not yet installed it will see a clear "inactive" line instead of silent omission, matching the existing codex detection contract.
