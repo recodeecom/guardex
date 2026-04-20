@@ -13,6 +13,8 @@ OPENSPEC_CHANGE_SLUG_OVERRIDE="${GUARDEX_OPENSPEC_CHANGE_SLUG:-}"
 OPENSPEC_CAPABILITY_SLUG_OVERRIDE="${GUARDEX_OPENSPEC_CAPABILITY_SLUG:-}"
 PR_REF="${GUARDEX_GH_PR_REF:-}"
 GH_REPO_REF="${GUARDEX_GH_REPO:-}"
+PLAN_MODE_RAW="${GX_PLAN_MODE:-${GUARDEX_PLAN_MODE:-}}"
+PLAN_MODE_EXPLICIT=0
 PRINT_NAME_ONLY=0
 POSITIONAL_ARGS=()
 
@@ -60,6 +62,16 @@ while [[ $# -gt 0 ]]; do
       PRINT_NAME_ONLY=1
       shift
       ;;
+    --plan-mode)
+      PLAN_MODE_RAW="true"
+      PLAN_MODE_EXPLICIT=1
+      shift
+      ;;
+    --no-plan-mode)
+      PLAN_MODE_RAW="false"
+      PLAN_MODE_EXPLICIT=1
+      shift
+      ;;
     --tier)
       # Accepted for CLAUDE.md compatibility; scaffold size is not yet wired
       # through this script. Consume the value so callers can pass it.
@@ -75,7 +87,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     -*)
       echo "[agent-branch-start] Unknown option: $1" >&2
-      echo "Usage: $0 [task] [agent] [base] [--worktree-root <path>] [--pr <ref>] [--repo <owner/name>] [--gh-sync|--no-gh-sync] [--print-name-only]" >&2
+      echo "Usage: $0 [task] [agent] [base] [--worktree-root <path>] [--pr <ref>] [--repo <owner/name>] [--gh-sync|--no-gh-sync] [--plan-mode|--no-plan-mode] [--print-name-only]" >&2
       exit 1
       ;;
     *)
@@ -87,7 +99,7 @@ done
 
 if [[ "${#POSITIONAL_ARGS[@]}" -gt 3 ]]; then
   echo "[agent-branch-start] Too many positional arguments." >&2
-  echo "Usage: $0 [task] [agent] [base] [--worktree-root <path>] [--pr <ref>] [--repo <owner/name>] [--gh-sync|--no-gh-sync]" >&2
+  echo "Usage: $0 [task] [agent] [base] [--worktree-root <path>] [--pr <ref>] [--repo <owner/name>] [--gh-sync|--no-gh-sync] [--plan-mode|--no-plan-mode]" >&2
   exit 1
 fi
 
@@ -203,6 +215,72 @@ normalize_bool() {
     '') printf '%s' "$fallback" ;;
     *) printf '%s' "$fallback" ;;
   esac
+}
+
+is_plan_permission_mode() {
+  local raw lowered
+  for raw in \
+    "${GUARDEX_PERMISSION_MODE:-}" \
+    "${OMX_PERMISSION_MODE:-}" \
+    "${CODEX_PERMISSION_MODE:-}" \
+    "${CLAUDE_PERMISSION_MODE:-}" \
+    "${CLAUDE_CODE_PERMISSION_MODE:-}"; do
+    lowered="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$lowered" == "plan" ]]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+has_ralplan_keyword_signal() {
+  local combined lowered
+  combined="${GUARDEX_WORKFLOW_KEYWORD:-} ${OMX_WORKFLOW_KEYWORD:-} ${OMX_ACTIVE_SKILL:-} ${GUARDEX_ACTIVE_SKILL:-}"
+  lowered="$(printf '%s' "$combined" | tr '[:upper:]' '[:lower:]')"
+  [[ "$lowered" == *ralplan* ]]
+}
+
+recent_active_ralplan_state_exists() {
+  local root="$1"
+  local sessions_dir="${root}/.omx/state/sessions"
+  local now path mtime
+  if [[ ! -d "$sessions_dir" ]]; then
+    return 1
+  fi
+
+  now="$(date +%s)"
+  while IFS= read -r -d '' path; do
+    if ! grep -Eq '"active"[[:space:]]*:[[:space:]]*true' "$path"; then
+      continue
+    fi
+
+    mtime="$(stat -c %Y "$path" 2>/dev/null || stat -f %m "$path" 2>/dev/null || echo 0)"
+    if [[ "$mtime" =~ ^[0-9]+$ ]] && (( now - mtime <= 21600 )); then
+      return 0
+    fi
+  done < <(find "$sessions_dir" -maxdepth 2 -type f -name 'ralplan-state.json' -print0 2>/dev/null)
+
+  return 1
+}
+
+resolve_plan_mode_enabled() {
+  local root="$1"
+  if [[ "$PLAN_MODE_EXPLICIT" -eq 1 ]]; then
+    normalize_bool "$PLAN_MODE_RAW" "0"
+    return 0
+  fi
+
+  if [[ -n "$PLAN_MODE_RAW" ]]; then
+    normalize_bool "$PLAN_MODE_RAW" "0"
+    return 0
+  fi
+
+  if is_plan_permission_mode || has_ralplan_keyword_signal || recent_active_ralplan_state_exists "$root"; then
+    printf '1'
+    return 0
+  fi
+
+  printf '0'
 }
 
 OPENSPEC_AUTO_INIT="$(normalize_bool "$OPENSPEC_AUTO_INIT_RAW" "1")"
@@ -788,6 +866,105 @@ EOF
   echo "[agent-branch-start] Mem0 worktree memory: ${mem0_dir}"
 }
 
+PLAN_MODE_FILE_REL_PATH=""
+
+initialize_plan_mode_markdown() {
+  local worktree="$1"
+  local task_name="$2"
+  local task_slug="$3"
+  local branch_name="$4"
+  local base_branch="$5"
+
+  if [[ "$PLAN_MODE" -ne 1 ]]; then
+    return 0
+  fi
+
+  local plans_dir="${worktree}/.omx/plans"
+  local date_prefix file_name candidate_path suffix
+
+  mkdir -p "$plans_dir"
+
+  date_prefix="$(date +%Y-%m-%d)"
+  file_name="${date_prefix}-${task_slug}.md"
+  candidate_path="${plans_dir}/${file_name}"
+  suffix=2
+  while [[ -e "$candidate_path" ]]; do
+    file_name="${date_prefix}-${task_slug}-${suffix}.md"
+    candidate_path="${plans_dir}/${file_name}"
+    suffix=$((suffix + 1))
+  done
+
+  cat >"$candidate_path" <<EOF
+# PRD: ${task_name}
+
+> 4 phases · estimate pending · persists across sessions
+> Branch: \`${branch_name}\`
+> Base: \`${base_branch}\`
+
+## 1. Problem
+
+Describe the concrete problem and current failure/symptom.
+
+## 2. Goal
+
+Deliver a safe, reversible implementation plan that can be executed phase-by-phase.
+
+## 3. Scope
+
+1. Define the behavior and boundaries for this change.
+2. List the code paths/modules expected to change.
+3. Record verification expectations before implementation begins.
+
+## 4. Non-Goals
+
+1. Avoid unrelated refactors while in plan mode.
+2. Do not cut over destructive changes until shadow validation passes.
+
+## 5. Phased Backlog
+
+### Phase 1 — Discovery + Read-only Mapping (45m · 3 files)
+
+- Map current implementation and dependent callers.
+- Capture constraints and rollout guardrails.
+
+### Phase 2 — Plan Skeleton + Flags (30m · 2 files)
+
+- Define switch/feature-flag strategy and fallback path.
+- Document acceptance checks per caller surface.
+
+### Phase 3 — Shadow Validation (24h observe · 1 file)
+
+- Run old/new paths in parallel and log output diffs.
+- Load-test critical path (for example: 100 concurrent reads).
+
+### Phase 4 — Cutover + Cleanup (1h · 4 files) [deferred]
+
+- Flip default path after shadow window is clean.
+- Remove deprecated fallback implementation in a follow-up PR.
+
+## 6. Acceptance Criteria
+
+1. Plan includes explicit phase boundaries and success signals.
+2. Verification steps are concrete and runnable.
+3. Rollback path is documented before cutover.
+
+## 7. Risks and Mitigations
+
+1. Risk: drift between plan and execution.
+Mitigation: revise this file before each phase starts.
+2. Risk: hidden dependency callers.
+Mitigation: add caller inventory during phase 1.
+
+## 8. Rollout Strategy
+
+1. Keep execution behind explicit approvals for each phase.
+2. Keep phase 4 deferred until validation evidence is green.
+3. Capture final evidence and lessons learned in the completion handoff.
+EOF
+
+  PLAN_MODE_FILE_REL_PATH=".omx/plans/${file_name}"
+}
+
 run_startup_context_artifacts() {
   local repo="$1"
   local worktree="$2"
@@ -943,8 +1120,12 @@ if [[ "$BASE_BRANCH_EXPLICIT" -eq 0 ]]; then
   fi
 fi
 
+PLAN_MODE="$(resolve_plan_mode_enabled "$repo_root")"
 task_slug="$(sanitize_slug "$TASK_NAME" "task")"
 agent_slug="$(normalize_role "$AGENT_NAME")"
+if [[ "$PLAN_MODE" -eq 1 ]]; then
+  agent_slug="plan"
+fi
 branch_timestamp="$(compose_branch_timestamp)"
 branch_descriptor="$(compose_branch_descriptor "$task_slug" "$branch_timestamp")"
 branch_name_base="agent/${agent_slug}/${branch_descriptor}"
@@ -1041,6 +1222,7 @@ if [[ "$reused_existing_worktree" -eq 0 ]]; then
   fi
 fi
 initialize_worktree_mem0_layer "$worktree_path" "$branch_name" "$BASE_BRANCH" "$task_slug" "$agent_slug"
+initialize_plan_mode_markdown "$worktree_path" "$TASK_NAME" "$task_slug" "$branch_name" "$BASE_BRANCH"
 
 run_startup_context_artifacts "$repo_root" "$worktree_path" "$branch_name" "$BASE_BRANCH" "$PR_REF" "$GH_REPO_REF"
 record_worktree_bootstrap_manifest "$worktree_path" "$branch_name" "$BASE_BRANCH" "$openspec_change_slug" "$openspec_plan_slug"
@@ -1064,6 +1246,12 @@ if [[ "$helper_branch_assist_mode" -eq 1 ]]; then
 else
   echo "[agent-branch-start] OpenSpec change: openspec/changes/${openspec_change_slug}"
   echo "[agent-branch-start] OpenSpec plan: openspec/plan/${openspec_plan_slug}"
+fi
+if [[ "$PLAN_MODE" -eq 1 ]]; then
+  echo "[agent-branch-start] Plan mode: ON (agent/plan/* branch)"
+  if [[ -n "$PLAN_MODE_FILE_REL_PATH" ]]; then
+    echo "[agent-branch-start] Plan file: ${PLAN_MODE_FILE_REL_PATH}"
+  fi
 fi
 echo "[agent-branch-start] Next steps:"
 echo "  cd \"${worktree_path}\""

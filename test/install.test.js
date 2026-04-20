@@ -215,6 +215,12 @@ function extractOpenSpecChangeSlug(output) {
   return match[1].trim();
 }
 
+function extractPlanFilePath(output) {
+  const match = String(output || '').match(/\[agent-branch-start\] Plan file: (.+)/);
+  assert.ok(match, `missing plan file path in output: ${output}`);
+  return match[1].trim();
+}
+
 function extractHookCommands(settings) {
   const hooks = settings && typeof settings === 'object' ? settings.hooks : null;
   if (!hooks || typeof hooks !== 'object') {
@@ -1290,6 +1296,52 @@ test('setup agent-branch-start keeps role-datetime branch labels compact (v7.0.3
   assert.ok(branchLeaf.length <= 90, `branch leaf should stay compact, got: ${branchLeaf}`);
   // Snapshot name and account email fragments must not leak into the leaf.
   assert.doesNotMatch(branchLeaf, /zeus|portasmosonma|admin-recodee/);
+});
+
+test('setup agent-branch-start plan mode creates agent/plan branch and .omx plans markdown', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(repoDir);
+
+  result = runCmd(
+    'bash',
+    ['scripts/agent-branch-start.sh', 'dashboard-rust-port', 'planner', 'dev', '--plan-mode'],
+    repoDir,
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const createdBranch = extractCreatedBranch(result.stdout);
+  const createdWorktree = extractCreatedWorktree(result.stdout);
+  const planFileRel = extractPlanFilePath(result.stdout);
+  const planFileAbs = path.join(createdWorktree, planFileRel);
+
+  assert.match(createdBranch, /^agent\/plan\/dashboard-rust-port-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}$/);
+  assert.equal(fs.existsSync(planFileAbs), true, `missing plan markdown: ${planFileAbs}`);
+  const planContent = fs.readFileSync(planFileAbs, 'utf8');
+  assert.match(planContent, /^# PRD: dashboard-rust-port/m);
+  assert.match(planContent, /^## 5\. Phased Backlog/m);
+  assert.match(planContent, /^### Phase 1 — Discovery \+ Read-only Mapping/m);
+});
+
+test('setup agent-branch-start auto-enters plan mode from Claude plan permission env', () => {
+  const repoDir = initRepo();
+
+  let result = runNode(['setup', '--target', repoDir], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(repoDir);
+
+  result = runCmd(
+    'bash',
+    ['scripts/agent-branch-start.sh', 'inventory-slice', 'planner', 'dev'],
+    repoDir,
+    { env: { CLAUDE_PERMISSION_MODE: 'plan' } },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const createdBranch = extractCreatedBranch(result.stdout);
+  assert.match(createdBranch, /^agent\/plan\/inventory-slice-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}$/);
+  assert.match(result.stdout, /\[agent-branch-start\] Plan mode: ON \(agent\/plan\/\* branch\)/);
 });
 
 test('setup agent-branch-start supports optional OpenSpec auto-bootstrap toggles', () => {
@@ -2494,6 +2546,48 @@ test('codex-agent launches codex inside a fresh sandbox worktree and keeps branc
     true,
     'codex-agent should scaffold OpenSpec change spec in sandbox',
   );
+});
+
+test('codex-agent forwards --permission-mode plan to plan-mode sandbox branch start', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+
+  const setupResult = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(setupResult.status, 0, setupResult.stderr || setupResult.stdout);
+  let result = runCmd('git', ['add', '.'], repoDir);
+  assert.equal(result.status, 0, result.stderr);
+  result = runCmd('git', ['commit', '-m', 'apply gx setup'], repoDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const fakeBin = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-fake-codex-plan-'));
+  const fakeCodexPath = path.join(fakeBin, 'codex');
+  fs.writeFileSync(
+    fakeCodexPath,
+    `#!/usr/bin/env bash\n` +
+      `pwd > "${'${GUARDEX_TEST_CODEX_CWD}'}"\n` +
+      `echo "$@" > "${'${GUARDEX_TEST_CODEX_ARGS}'}"\n`,
+    'utf8',
+  );
+  fs.chmodSync(fakeCodexPath, 0o755);
+
+  const cwdMarker = path.join(repoDir, '.codex-agent-plan-cwd');
+  const argsMarker = path.join(repoDir, '.codex-agent-plan-args');
+  const launch = runCmd(
+    'bash',
+    ['scripts/codex-agent.sh', 'dashboard-rust-port', 'planner', 'dev', '--permission-mode', 'plan'],
+    repoDir,
+    {
+      PATH: `${fakeBin}:${process.env.PATH}`,
+      GUARDEX_TEST_CODEX_CWD: cwdMarker,
+      GUARDEX_TEST_CODEX_ARGS: argsMarker,
+    },
+  );
+  assert.equal(launch.status, 0, launch.stderr || launch.stdout);
+  const launchedBranch = extractCreatedBranch(launch.stdout);
+  assert.match(launchedBranch, /^agent\/plan\/[a-z0-9-]+-\d{4}-\d{2}-\d{2}-\d{2}-\d{2}$/);
+  assert.match(launch.stdout, /\[agent-branch-start\] Plan mode: ON \(agent\/plan\/\* branch\)/);
 });
 
 test('codex-agent restores local branch and falls back to safe worktree start when starter script switches in-place', () => {

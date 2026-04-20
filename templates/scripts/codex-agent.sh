@@ -14,6 +14,7 @@ OPENSPEC_AUTO_INIT_RAW="${GUARDEX_OPENSPEC_AUTO_INIT:-true}"
 OPENSPEC_PLAN_SLUG_OVERRIDE="${GUARDEX_OPENSPEC_PLAN_SLUG:-}"
 OPENSPEC_CHANGE_SLUG_OVERRIDE="${GUARDEX_OPENSPEC_CHANGE_SLUG:-}"
 OPENSPEC_CAPABILITY_SLUG_OVERRIDE="${GUARDEX_OPENSPEC_CAPABILITY_SLUG:-}"
+PLAN_MODE_START=0
 
 normalize_bool() {
   local raw="${1:-}"
@@ -26,6 +27,22 @@ normalize_bool() {
     '') printf '%s' "$fallback" ;;
     *) printf '%s' "$fallback" ;;
   esac
+}
+
+has_plan_permission_arg() {
+  local previous=""
+  local arg lowered
+  for arg in "$@"; do
+    lowered="$(printf '%s' "$arg" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$lowered" == "--permission-mode=plan" || "$lowered" == "--plan-mode" ]]; then
+      return 0
+    fi
+    if [[ "$previous" == "--permission-mode" && "$lowered" == "plan" ]]; then
+      return 0
+    fi
+    previous="$lowered"
+  done
+  return 1
 }
 
 AUTO_FINISH="$(normalize_bool "$AUTO_FINISH_RAW" "1")"
@@ -257,7 +274,11 @@ start_sandbox_fallback() {
 
   timestamp="$(date +%Y%m%d-%H%M%S)"
   task_slug="$(sanitize_slug "$TASK_NAME" "task")"
-  agent_slug="$(sanitize_slug "$AGENT_NAME" "agent")"
+  if [[ "$PLAN_MODE_START" -eq 1 ]]; then
+    agent_slug="plan"
+  else
+    agent_slug="$(sanitize_slug "$AGENT_NAME" "agent")"
+  fi
   branch_name_base="agent/${agent_slug}/${timestamp}-${task_slug}"
   branch_name="$branch_name_base"
   suffix=2
@@ -292,6 +313,10 @@ fi
 start_args=("$TASK_NAME" "$AGENT_NAME")
 if [[ "$BASE_BRANCH_EXPLICIT" -eq 1 ]]; then
   start_args+=("$BASE_BRANCH")
+fi
+if [[ "$(normalize_bool "${GX_PLAN_MODE:-${GUARDEX_PLAN_MODE:-}}" "0")" -eq 1 ]] || has_plan_permission_arg "$@"; then
+  PLAN_MODE_START=1
+  start_args+=(--plan-mode)
 fi
 
 initial_repo_branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"

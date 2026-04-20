@@ -9,6 +9,7 @@ CODEX_BIN="${GUARDEX_CODEX_BIN:-codex}"
 GH_PR_REF="${GUARDEX_GH_PR_REF:-}"
 GH_REPO_REF="${GUARDEX_GH_REPO:-}"
 GH_SYNC_FLAG=""
+PLAN_MODE_START=0
 
 if [[ -n "$BASE_BRANCH" ]]; then
   BASE_BRANCH_EXPLICIT=1
@@ -90,6 +91,35 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 repo_root="$(git rev-parse --show-toplevel)"
 
+normalize_bool() {
+  local raw="${1:-}"
+  local fallback="${2:-0}"
+  local lowered
+  lowered="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+  case "$lowered" in
+    1|true|yes|on) printf '1' ;;
+    0|false|no|off) printf '0' ;;
+    '') printf '%s' "$fallback" ;;
+    *) printf '%s' "$fallback" ;;
+  esac
+}
+
+has_plan_permission_arg() {
+  local previous=""
+  local arg lowered
+  for arg in "$@"; do
+    lowered="$(printf '%s' "$arg" | tr '[:upper:]' '[:lower:]')"
+    if [[ "$lowered" == "--permission-mode=plan" || "$lowered" == "--plan-mode" ]]; then
+      return 0
+    fi
+    if [[ "$previous" == "--permission-mode" && "$lowered" == "plan" ]]; then
+      return 0
+    fi
+    previous="$lowered"
+  done
+  return 1
+}
+
 if [[ ! -x "${repo_root}/scripts/agent-branch-start.sh" ]]; then
   echo "[codex-agent] Missing scripts/agent-branch-start.sh. Run: gx setup" >&2
   exit 1
@@ -107,6 +137,10 @@ if [[ -n "$GH_REPO_REF" ]]; then
 fi
 if [[ -n "$GH_SYNC_FLAG" ]]; then
   start_args+=("$GH_SYNC_FLAG")
+fi
+if [[ "$(normalize_bool "${GX_PLAN_MODE:-${GUARDEX_PLAN_MODE:-}}" "0")" -eq 1 ]] || has_plan_permission_arg "$@"; then
+  PLAN_MODE_START=1
+  start_args+=(--plan-mode)
 fi
 
 derive_worktree_session_key() {
