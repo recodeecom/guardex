@@ -1,0 +1,35 @@
+name: Sync Frontend Mirror
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - frontend/**
+      - scripts/sync-frontend-mirror.sh
+      - .github/workflows/sync-frontend-mirror.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-frontend-mirror
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    env:
+      TARGET_REPO: ${{ vars.GUARDEX_FRONTEND_MIRROR_REPO || 'Webu-PRO/guardex-frontend' }}
+      TARGET_BRANCH: ${{ vars.GUARDEX_FRONTEND_MIRROR_BRANCH || 'main' }}
+      SOURCE_PREFIX: frontend
+      SYNC_TOKEN: ${{ secrets.GUARDEX_FRONTEND_MIRROR_PAT }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Sync frontend subtree to mirror repo
+        run: bash scripts/sync-frontend-mirror.sh

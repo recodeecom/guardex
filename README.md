@@ -287,6 +287,34 @@ Then in your repo:
 
 After that, the app reviews new and updated pull requests automatically.
 
+## Frontend mirror sync (`Webu-PRO/guardex-frontend`)
+
+This repo includes `.github/workflows/sync-frontend-mirror.yml`, which mirrors
+the `frontend/` subtree to a separate repository whenever `main` receives
+changes under `frontend/**`.
+
+Default target:
+
+- repo: `Webu-PRO/guardex-frontend`
+- branch: `main`
+
+Required setup (in this repository):
+
+1. `Settings -> Secrets and variables -> Actions`
+2. Add repository secret `GUARDEX_FRONTEND_MIRROR_PAT`
+   - value must be a token with `contents:write` access to `Webu-PRO/guardex-frontend`
+
+Optional overrides (Actions Variables):
+
+- `GUARDEX_FRONTEND_MIRROR_REPO` (default `Webu-PRO/guardex-frontend`)
+- `GUARDEX_FRONTEND_MIRROR_BRANCH` (default `main`)
+
+Manual run:
+
+```sh
+gh workflow run sync-frontend-mirror.yml
+```
+
 ## Companion dependency: `codex-auth` account switcher
 
 For multi-identity Codex workflows, GuardeX pairs with
