@@ -3885,6 +3885,43 @@ test('doctor repairs setup drift and confirms repo is safe', () => {
   assert.equal(scanAfter.status, 0, scanAfter.stderr || scanAfter.stdout);
 });
 
+test('doctor recurses into nested frontend repos and repairs protected-main drift', () => {
+  const repoDir = initRepo();
+  const frontendDir = path.join(repoDir, 'frontend');
+  fs.mkdirSync(frontendDir, { recursive: true });
+
+  let result = runCmd('git', ['init', '-b', 'main'], frontendDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(frontendDir);
+
+  result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.equal(fs.existsSync(path.join(frontendDir, 'AGENTS.md')), true, 'nested frontend should be bootstrapped by setup');
+
+  fs.rmSync(path.join(frontendDir, 'AGENTS.md'));
+  fs.rmSync(path.join(frontendDir, 'scripts', 'agent-branch-start.sh'));
+  fs.rmSync(path.join(frontendDir, '.githooks', 'pre-commit'));
+  fs.writeFileSync(path.join(frontendDir, '.omx', 'state', 'agent-file-locks.json'), '{broken json', 'utf8');
+
+  result = runNode(['doctor', '--target', repoDir], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Detected 2 git repos under/);
+  assert.match(result.stdout, new RegExp(`Doctor target: ${escapeRegexLiteral(frontendDir)}`));
+  assert.match(result.stdout, /doctor detected protected branch 'main'/);
+
+  assert.equal(fs.existsSync(path.join(frontendDir, 'AGENTS.md')), true, 'nested frontend AGENTS.md should be restored');
+  assert.equal(
+    fs.existsSync(path.join(frontendDir, 'scripts', 'agent-branch-start.sh')),
+    true,
+    'nested frontend sandbox starter should be restored',
+  );
+  const repairedFrontendHook = fs.readFileSync(path.join(frontendDir, '.githooks', 'pre-commit'), 'utf8');
+  assert.match(repairedFrontendHook, /AGENTS\.md\|\.gitignore/);
+
+  const frontendScanAfter = runNode(['scan', '--target', frontendDir], repoDir);
+  assert.equal(frontendScanAfter.status, 0, frontendScanAfter.stderr || frontendScanAfter.stdout);
+});
+
 test('report scorecard creates baseline + remediation reports', () => {
   const repoDir = initRepo();
   const fakeScorecard = createFakeScorecardScript(`

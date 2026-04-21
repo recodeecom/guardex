@@ -1005,14 +1005,56 @@ function parseCommonArgs(rawArgs, defaults) {
   return options;
 }
 
-function parseSetupArgs(rawArgs, defaults) {
-  const setupDefaults = {
+function parseRepoTraversalArgs(rawArgs, defaults) {
+  const traversalDefaults = {
     ...defaults,
-    parentWorkspaceView: false,
     recursive: true,
     nestedMaxDepth: NESTED_REPO_DEFAULT_MAX_DEPTH,
     nestedSkipDirs: [],
     includeSubmodules: false,
+  };
+  const forwardedArgs = [];
+
+  for (let index = 0; index < rawArgs.length; index += 1) {
+    const arg = rawArgs[index];
+    if (arg === '--no-recursive' || arg === '--no-nested' || arg === '--single-repo') {
+      traversalDefaults.recursive = false;
+      continue;
+    }
+    if (arg === '--recursive' || arg === '--nested') {
+      traversalDefaults.recursive = true;
+      continue;
+    }
+    if (arg === '--max-depth') {
+      const raw = requireValue(rawArgs, index, '--max-depth');
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isFinite(parsed) || parsed < 1) {
+        throw new Error('--max-depth requires a positive integer');
+      }
+      traversalDefaults.nestedMaxDepth = parsed;
+      index += 1;
+      continue;
+    }
+    if (arg === '--skip-nested') {
+      const raw = requireValue(rawArgs, index, '--skip-nested');
+      traversalDefaults.nestedSkipDirs.push(raw);
+      index += 1;
+      continue;
+    }
+    if (arg === '--include-submodules') {
+      traversalDefaults.includeSubmodules = true;
+      continue;
+    }
+    forwardedArgs.push(arg);
+  }
+
+  return parseCommonArgs(forwardedArgs, traversalDefaults);
+}
+
+function parseSetupArgs(rawArgs, defaults) {
+  const setupDefaults = {
+    ...defaults,
+    parentWorkspaceView: false,
   };
   const forwardedArgs = [];
 
@@ -1026,61 +1068,23 @@ function parseSetupArgs(rawArgs, defaults) {
       setupDefaults.parentWorkspaceView = false;
       continue;
     }
-    if (arg === '--no-recursive' || arg === '--no-nested' || arg === '--single-repo') {
-      setupDefaults.recursive = false;
-      continue;
-    }
-    if (arg === '--recursive' || arg === '--nested') {
-      setupDefaults.recursive = true;
-      continue;
-    }
-    if (arg === '--max-depth') {
-      const raw = requireValue(rawArgs, index, '--max-depth');
-      const parsed = Number.parseInt(raw, 10);
-      if (!Number.isFinite(parsed) || parsed < 1) {
-        throw new Error('--max-depth requires a positive integer');
-      }
-      setupDefaults.nestedMaxDepth = parsed;
-      index += 1;
-      continue;
-    }
-    if (arg === '--skip-nested') {
-      const raw = requireValue(rawArgs, index, '--skip-nested');
-      setupDefaults.nestedSkipDirs.push(raw);
-      index += 1;
-      continue;
-    }
-    if (arg === '--include-submodules') {
-      setupDefaults.includeSubmodules = true;
-      continue;
-    }
     forwardedArgs.push(arg);
   }
 
-  return parseCommonArgs(forwardedArgs, setupDefaults);
+  return parseRepoTraversalArgs(forwardedArgs, setupDefaults);
 }
 
 function parseDoctorArgs(rawArgs) {
-  const options = {
+  return parseRepoTraversalArgs(rawArgs, {
     target: process.cwd(),
-    strict: false,
-  };
-
-  for (let index = 0; index < rawArgs.length; index += 1) {
-    const arg = rawArgs[index];
-    if (arg === '--target' || arg === '-t') {
-      options.target = requireValue(rawArgs, index, '--target');
-      index += 1;
-      continue;
-    }
-    if (arg === '--strict') {
-      options.strict = true;
-      continue;
-    }
-    throw new Error(`Unknown option: ${arg}`);
-  }
-
-  return options;
+    dropStaleLocks: true,
+    skipAgents: false,
+    skipPackageJson: false,
+    skipGitignore: false,
+    dryRun: false,
+    json: false,
+    allowProtectedBaseWrite: false,
+  });
 }
 
 function normalizeWorkspacePath(relativePath) {
@@ -1609,6 +1613,33 @@ function finishDoctorSandboxBranch(blocked, metadata) {
   };
 }
 
+function syncProtectedBaseDoctorRepairs(options, blocked) {
+  const fixPayload = runFixInternal({
+    ...options,
+    target: blocked.repoRoot,
+    allowProtectedBaseWrite: true,
+  });
+  const changedOperations = fixPayload.operations.filter(
+    (operation) => !['unchanged', 'skipped'].includes(operation.status),
+  );
+  const hookChanged = fixPayload.hookResult?.status && fixPayload.hookResult.status !== 'unchanged';
+  const changedCount = changedOperations.length + (hookChanged ? 1 : 0);
+
+  if (changedCount === 0) {
+    return {
+      status: 'unchanged',
+      note: 'managed repair files already aligned in protected branch workspace',
+      fixPayload,
+    };
+  }
+
+  return {
+    status: options.dryRun ? 'would-sync' : 'synced',
+    note: `${options.dryRun ? 'would sync' : 'synced'} ${changedCount} managed repair item(s)`,
+    fixPayload,
+  };
+}
+
 function runDoctorInSandbox(options, blocked) {
   const startResult = startDoctorSandbox(blocked);
   const metadata = startResult.metadata;
@@ -1632,6 +1663,10 @@ function runDoctorInSandbox(options, blocked) {
     note: 'sandbox doctor did not complete successfully',
   };
 
+  let protectedBaseRepairSyncResult = {
+    status: 'skipped',
+    note: 'sandbox doctor did not complete successfully',
+  };
   let lockSyncResult = {
     status: 'skipped',
     note: 'sandbox doctor did not complete successfully',
@@ -1649,6 +1684,7 @@ function runDoctorInSandbox(options, blocked) {
     note: 'sandbox doctor did not complete successfully',
   };
   if (nestedResult.status === 0) {
+    protectedBaseRepairSyncResult = syncProtectedBaseDoctorRepairs(options, blocked);
     const omxScaffoldOps = ensureOmxScaffold(blocked.repoRoot, Boolean(options.dryRun));
     const changedOmxPaths = omxScaffoldOps.filter((operation) => operation.status !== 'unchanged');
     if (changedOmxPaths.length === 0) {
@@ -1737,6 +1773,7 @@ function runDoctorInSandbox(options, blocked) {
             JSON.stringify(
               {
                 ...parsed,
+                protectedBaseRepairSync: protectedBaseRepairSyncResult,
                 sandboxOmxScaffoldSync: omxScaffoldSyncResult,
                 sandboxLockSync: lockSyncResult,
                 sandboxAutoCommit: autoCommitResult,
@@ -1775,6 +1812,16 @@ function runDoctorInSandbox(options, blocked) {
         if (autoCommitResult.stderr) process.stderr.write(autoCommitResult.stderr);
       } else {
         console.log(`[${TOOL_NAME}] Doctor sandbox auto-commit skipped: ${autoCommitResult.note}.`);
+      }
+
+      if (protectedBaseRepairSyncResult.status === 'synced') {
+        console.log(`[${TOOL_NAME}] Synced repaired managed files back to protected branch workspace.`);
+      } else if (protectedBaseRepairSyncResult.status === 'unchanged') {
+        console.log(`[${TOOL_NAME}] Protected branch workspace already had the repaired managed files.`);
+      } else if (protectedBaseRepairSyncResult.status === 'would-sync') {
+        console.log(`[${TOOL_NAME}] Dry run: would sync repaired managed files back to protected branch workspace.`);
+      } else {
+        console.log(`[${TOOL_NAME}] Protected branch workspace repair sync skipped: ${protectedBaseRepairSyncResult.note}.`);
       }
 
       if (finishResult.status === 'completed') {
@@ -4450,26 +4497,116 @@ function scan(rawArgs) {
 }
 
 function doctor(rawArgs) {
-  const options = parseCommonArgs(rawArgs, {
-    target: process.cwd(),
-    dropStaleLocks: true,
-    skipAgents: false,
-    skipPackageJson: false,
-    skipGitignore: false,
-    dryRun: false,
-    json: false,
-    allowProtectedBaseWrite: false,
-  });
+  const options = parseDoctorArgs(rawArgs);
+  const topRepoRoot = resolveRepoRoot(options.target);
+  const discoveredRepos = options.recursive
+    ? discoverNestedGitRepos(topRepoRoot, {
+      maxDepth: options.nestedMaxDepth,
+      extraSkip: options.nestedSkipDirs,
+      includeSubmodules: options.includeSubmodules,
+    })
+    : [topRepoRoot];
 
-  const blocked = protectedBaseWriteBlock(options, { requireBootstrap: false });
-  if (blocked) {
-    runDoctorInSandbox(options, blocked);
+  if (discoveredRepos.length > 1) {
+    if (!options.json) {
+      console.log(
+        `[${TOOL_NAME}] Detected ${discoveredRepos.length} git repos under ${topRepoRoot}. ` +
+        `Repairing each with doctor (use --single-repo to limit to the target).`,
+      );
+    }
+
+    const repoResults = [];
+    let aggregateExitCode = 0;
+    for (const repoPath of discoveredRepos) {
+      if (!options.json) {
+        console.log(`[${TOOL_NAME}] ── Doctor target: ${repoPath} ──`);
+      }
+
+      const nestedResult = run(
+        process.execPath,
+        [
+          path.resolve(__filename),
+          'doctor',
+          '--single-repo',
+          '--target',
+          repoPath,
+          ...(options.dropStaleLocks ? [] : ['--keep-stale-locks']),
+          ...(options.skipAgents ? ['--skip-agents'] : []),
+          ...(options.skipPackageJson ? ['--skip-package-json'] : []),
+          ...(options.skipGitignore ? ['--no-gitignore'] : []),
+          ...(options.dryRun ? ['--dry-run'] : []),
+          ...(options.json ? ['--json'] : []),
+          ...(options.allowProtectedBaseWrite ? ['--allow-protected-base-write'] : []),
+        ],
+        { cwd: topRepoRoot },
+      );
+      if (isSpawnFailure(nestedResult)) {
+        throw nestedResult.error;
+      }
+
+      const exitCode = typeof nestedResult.status === 'number' ? nestedResult.status : 1;
+      if (exitCode !== 0 && aggregateExitCode === 0) {
+        aggregateExitCode = exitCode;
+      }
+
+      if (options.json) {
+        let parsedResult = null;
+        if (nestedResult.stdout) {
+          try {
+            parsedResult = JSON.parse(nestedResult.stdout);
+          } catch {
+            parsedResult = null;
+          }
+        }
+        repoResults.push(
+          parsedResult
+            ? { repoRoot: repoPath, exitCode, result: parsedResult }
+            : {
+              repoRoot: repoPath,
+              exitCode,
+              stdout: nestedResult.stdout || '',
+              stderr: nestedResult.stderr || '',
+            },
+        );
+      } else {
+        if (nestedResult.stdout) process.stdout.write(nestedResult.stdout);
+        if (nestedResult.stderr) process.stderr.write(nestedResult.stderr);
+        process.stdout.write('\n');
+      }
+    }
+
+    if (options.json) {
+      process.stdout.write(
+        JSON.stringify(
+          {
+            repoRoot: topRepoRoot,
+            recursive: true,
+            repos: repoResults,
+          },
+          null,
+          2,
+        ) + '\n',
+      );
+    }
+
+    process.exitCode = aggregateExitCode;
     return;
   }
 
-  assertProtectedMainWriteAllowed(options, 'doctor');
-  const fixPayload = runFixInternal(options);
-  const scanResult = runScanInternal({ target: options.target, json: false });
+  const singleRepoOptions = {
+    ...options,
+    target: topRepoRoot,
+  };
+
+  const blocked = protectedBaseWriteBlock(singleRepoOptions, { requireBootstrap: false });
+  if (blocked) {
+    runDoctorInSandbox(singleRepoOptions, blocked);
+    return;
+  }
+
+  assertProtectedMainWriteAllowed(singleRepoOptions, 'doctor');
+  const fixPayload = runFixInternal(singleRepoOptions);
+  const scanResult = runScanInternal({ target: singleRepoOptions.target, json: false });
   const currentBaseBranch = currentBranchName(scanResult.repoRoot);
   const autoFinishSummary = scanResult.guardexEnabled === false
     ? {
@@ -4482,12 +4619,12 @@ function doctor(rawArgs) {
     }
     : autoFinishReadyAgentBranches(scanResult.repoRoot, {
       baseBranch: currentBaseBranch,
-      dryRun: options.dryRun,
+      dryRun: singleRepoOptions.dryRun,
     });
   const safe = scanResult.guardexEnabled === false || (scanResult.errors === 0 && scanResult.warnings === 0);
   const musafe = safe;
 
-  if (options.json) {
+  if (singleRepoOptions.json) {
     process.stdout.write(
       JSON.stringify(
         {
@@ -4498,7 +4635,7 @@ function doctor(rawArgs) {
           fix: {
             operations: fixPayload.operations,
             hookResult: fixPayload.hookResult,
-            dryRun: Boolean(options.dryRun),
+            dryRun: Boolean(singleRepoOptions.dryRun),
           },
           scan: {
             guardexEnabled: scanResult.guardexEnabled !== false,
@@ -4517,7 +4654,7 @@ function doctor(rawArgs) {
     return;
   }
 
-  printOperations('Doctor/fix', fixPayload, options.dryRun);
+  printOperations('Doctor/fix', fixPayload, singleRepoOptions.dryRun);
   printScanResult(scanResult, false);
   if (scanResult.guardexEnabled === false) {
     console.log(`[${TOOL_NAME}] Repo-local Guardex enforcement is intentionally disabled.`);
