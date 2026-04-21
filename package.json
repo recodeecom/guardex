@@ -55,10 +55,10 @@
   "author": "recodeecom",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/recodeee/guardex.git"
+    "url": "git+https://github.com/recodeee/gitguardex.git"
   },
   "bugs": {
-    "url": "https://github.com/recodeee/guardex/issues"
+    "url": "https://github.com/recodeee/gitguardex/issues"
   },
   "homepage": "https://guardextutorial.com",
   "funding": "https://github.com/sponsors/recodeecom",

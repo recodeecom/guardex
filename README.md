@@ -1,8 +1,8 @@
 # GitGuardex — Guardian T-Rex for your repo
 
 [![npm version](https://img.shields.io/npm/v/%40imdeadpool%2Fguardex?color=cb3837&logo=npm)](https://www.npmjs.com/package/@imdeadpool/guardex)
-[![CI](https://github.com/recodeee/guardex/actions/workflows/ci.yml/badge.svg)](https://github.com/recodeee/guardex/actions/workflows/ci.yml)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/recodeee/guardex/badge)](https://securityscorecards.dev/viewer/?uri=github.com/recodeee/guardex)
+[![CI](https://github.com/recodeee/gitguardex/actions/workflows/ci.yml/badge.svg)](https://github.com/recodeee/gitguardex/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/recodeee/gitguardex/badge)](https://securityscorecards.dev/viewer/?uri=github.com/recodeee/gitguardex)
 
 GitGuardex is a safety layer for parallel Codex/agent work in git repos.
 
@@ -22,7 +22,7 @@ Progress became **de-progressive**: more activity, less real forward movement.
 
 GitGuardex exists to stop that loop.
 
-![Multi-agent dashboard example](https://raw.githubusercontent.com/recodeee/guardex/main/docs/images/dashboard-multi-agent.png)
+![Multi-agent dashboard example](https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/dashboard-multi-agent.png)
 
 ```mermaid
 flowchart LR
@@ -92,23 +92,23 @@ gx finish --all
 
 ### Setup status
 
-![gx setup behavior screenshot](https://raw.githubusercontent.com/recodeee/guardex/main/docs/images/setup-success.svg)
+![gx setup behavior screenshot](https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/setup-success.svg)
 
 ### Service logs/status
 
-![gx status logs screenshot](https://raw.githubusercontent.com/recodeee/guardex/main/docs/images/status-tools-logs.svg)
+![gx status logs screenshot](https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/status-tools-logs.svg)
 
 ### Branch/worktree start protocol
 
-![gx branch start protocol screenshot](https://raw.githubusercontent.com/recodeee/guardex/main/docs/images/workflow-branch-start.svg)
+![gx branch start protocol screenshot](https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/workflow-branch-start.svg)
 
 ### Lock + delete guard protocol
 
-![gx lock and delete guard screenshot](https://raw.githubusercontent.com/recodeee/guardex/main/docs/images/workflow-lock-guard.svg)
+![gx lock and delete guard screenshot](https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/workflow-lock-guard.svg)
 
 ### VS Code Source Control layout (agent + OpenSpec files)
 
-![VS Code Source Control layout with OpenSpec files](https://raw.githubusercontent.com/recodeee/guardex/main/docs/images/workflow-source-control.svg)
+![VS Code Source Control layout with OpenSpec files](https://raw.githubusercontent.com/recodeee/gitguardex/main/docs/images/workflow-source-control.svg)
 
 ## Copy-paste: common commands
 
@@ -159,7 +159,7 @@ gx prompt --exec          # commands only         (v6 name: gx copy-commands)
 gx prompt --snippet       # AGENTS.md managed block template
 
 # reports
-gx report scorecard --repo github.com/recodeee/guardex
+gx report scorecard --repo github.com/recodeee/gitguardex
 ```
 
 ### v6 → v7 command migration
@@ -528,7 +528,7 @@ npm pack --dry-run
 ### v5.0.12
 
 - Bumped package version from `5.0.11` to `5.0.12` for the next npm publish.
-- Updated repository metadata and README links to the renamed GitHub repository (`recodeee/guardex`).
+- Updated repository metadata and README links to the renamed GitHub repository (`recodeee/gitguardex`).
 
 ### v5.0.11
 
