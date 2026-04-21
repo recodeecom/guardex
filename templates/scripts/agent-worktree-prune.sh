@@ -335,56 +335,59 @@ relocated_foreign=0
 skipped_foreign=0
 
 relocate_foreign_worktree_entries() {
-  [[ -d "$worktree_root" ]] || return 0
+  local rel="" worktree_root="" entry=""
+  for rel in "${WORKTREE_ROOT_RELS[@]}"; do
+    worktree_root="${repo_root}/${rel}"
+    [[ -d "$worktree_root" ]] || continue
 
-  local entry=""
-  for entry in "${worktree_root}"/*; do
-    [[ -d "$entry" ]] || continue
-    if ! git -C "$entry" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
-      continue
-    fi
+    for entry in "${worktree_root}"/*; do
+      [[ -d "$entry" ]] || continue
+      if ! git -C "$entry" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+        continue
+      fi
 
-    local entry_common_dir=""
-    entry_common_dir="$(resolve_worktree_common_dir "$entry" || true)"
-    [[ -n "$entry_common_dir" ]] || continue
+      local entry_common_dir=""
+      entry_common_dir="$(resolve_worktree_common_dir "$entry" || true)"
+      [[ -n "$entry_common_dir" ]] || continue
 
-    if [[ "$entry_common_dir" == "$repo_common_dir" ]]; then
-      continue
-    fi
+      if [[ "$entry_common_dir" == "$repo_common_dir" ]]; then
+        continue
+      fi
 
-    if [[ "$(basename "$entry_common_dir")" != ".git" ]]; then
-      skipped_foreign=$((skipped_foreign + 1))
-      echo "[agent-worktree-prune] Skipping foreign worktree with unsupported git common dir: ${entry}"
-      continue
-    fi
+      if [[ "$(basename "$entry_common_dir")" != ".git" ]]; then
+        skipped_foreign=$((skipped_foreign + 1))
+        echo "[agent-worktree-prune] Skipping foreign worktree with unsupported git common dir: ${entry}"
+        continue
+      fi
 
-    local owner_repo_root
-    owner_repo_root="$(dirname "$entry_common_dir")"
-    local owner_worktree_root_rel owner_worktree_root
-    owner_worktree_root_rel="$(resolve_worktree_root_rel_for_entry "$entry")"
-    owner_worktree_root="${owner_repo_root}/${owner_worktree_root_rel}"
-    local target_path
-    target_path="$(select_unique_worktree_path "$owner_worktree_root" "$(basename "$entry")")"
+      local owner_repo_root
+      owner_repo_root="$(dirname "$entry_common_dir")"
+      local owner_worktree_root_rel owner_worktree_root
+      owner_worktree_root_rel="$(resolve_worktree_root_rel_for_entry "$entry")"
+      owner_worktree_root="${owner_repo_root}/${owner_worktree_root_rel}"
+      local target_path
+      target_path="$(select_unique_worktree_path "$owner_worktree_root" "$(basename "$entry")")"
 
-    if [[ "$entry" == "$current_pwd" || "$current_pwd" == "${entry}"/* ]]; then
-      skipped_foreign=$((skipped_foreign + 1))
-      echo "[agent-worktree-prune] Skipping active foreign worktree: ${entry}"
-      continue
-    fi
+      if [[ "$entry" == "$current_pwd" || "$current_pwd" == "${entry}"/* ]]; then
+        skipped_foreign=$((skipped_foreign + 1))
+        echo "[agent-worktree-prune] Skipping active foreign worktree: ${entry}"
+        continue
+      fi
 
-    echo "[agent-worktree-prune] Relocating foreign worktree to owning repo: ${entry} -> ${target_path}"
-    if [[ "$DRY_RUN" -eq 1 ]]; then
-      relocated_foreign=$((relocated_foreign + 1))
-      continue
-    fi
+      echo "[agent-worktree-prune] Relocating foreign worktree to owning repo: ${entry} -> ${target_path}"
+      if [[ "$DRY_RUN" -eq 1 ]]; then
+        relocated_foreign=$((relocated_foreign + 1))
+        continue
+      fi
 
-    mkdir -p "$owner_worktree_root"
-    if git -C "$owner_repo_root" worktree move "$entry" "$target_path" >/dev/null 2>&1; then
-      relocated_foreign=$((relocated_foreign + 1))
-    else
-      skipped_foreign=$((skipped_foreign + 1))
-      echo "[agent-worktree-prune] Failed to relocate foreign worktree: ${entry}" >&2
-    fi
+      mkdir -p "$owner_worktree_root"
+      if git -C "$owner_repo_root" worktree move "$entry" "$target_path" >/dev/null 2>&1; then
+        relocated_foreign=$((relocated_foreign + 1))
+      else
+        skipped_foreign=$((skipped_foreign + 1))
+        echo "[agent-worktree-prune] Failed to relocate foreign worktree: ${entry}" >&2
+      fi
+    done
   done
 }
 
