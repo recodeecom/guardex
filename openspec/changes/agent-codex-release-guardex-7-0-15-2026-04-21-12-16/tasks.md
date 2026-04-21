@@ -16,6 +16,8 @@
 
 ## 4. Completion
 
-- [ ] 4.1 Finish the agent branch via PR merge + cleanup (`gx finish --via-pr --wait-for-merge --cleanup` or `bash scripts/agent-branch-finish.sh --branch <agent-branch> --base <base-branch> --via-pr --wait-for-merge --cleanup`).
-- [ ] 4.2 Record PR URL + final `MERGED` state in the completion handoff.
-- [ ] 4.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) or capture a `BLOCKED:` handoff if merge/cleanup is pending.
+- [x] 4.1 Finish the agent branch via PR merge + cleanup (`gx finish --via-pr --wait-for-merge --cleanup` or `bash scripts/agent-branch-finish.sh --branch <agent-branch> --base <base-branch> --via-pr --wait-for-merge --cleanup`). PR `#215` merged the release branch on `main` at `2026-04-21T10:26:16Z`.
+- [x] 4.2 Record PR URL + final `MERGED` state in the completion handoff. PR URL: <https://github.com/recodeee/gitguardex/pull/215>; state: `MERGED`; merge commit: `0ec36159676be5291418281034f0a687935bf4fb`.
+- [x] 4.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) or capture a `BLOCKED:` handoff if merge/cleanup is pending. `git worktree list` no longer shows `agent__executor__regression-fixes-2026-04-21-12-26`, and `git branch -a` no longer lists `agent/executor/regression-fixes-2026-04-21-12-26`.
+
+BLOCKED: Publishing the public GitHub release for `v7.0.15` still requires credentials with `workflow` scope. The tag `v7.0.15` points at `0ec36159676be5291418281034f0a687935bf4fb` on `recodeee/gitguardex`, but `gh release create` and browser automation both stopped on auth/target safety gates.
