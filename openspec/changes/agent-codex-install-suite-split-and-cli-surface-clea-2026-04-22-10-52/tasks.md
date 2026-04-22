@@ -47,6 +47,6 @@ This change is complete only when **all** of the following are true:
 
 ## 4. Cleanup (mandatory; run before claiming completion)
 
-- [ ] 4.1 Run the cleanup pipeline: `gx branch finish --branch agent/codex/install-suite-split-and-cli-surface-clea-2026-04-22-10-52 --base main --via-pr --wait-for-merge --cleanup`. This handles commit -> push -> PR create -> merge wait -> worktree prune in one invocation.
-- [ ] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
-- [ ] 4.3 Confirm the sandbox worktree is gone (`git worktree list` no longer shows the agent path; `git branch -a` shows no surviving local/remote refs for the branch).
+- [x] 4.1 Run the cleanup pipeline: `gx branch finish --branch agent/codex/install-suite-split-and-cli-surface-clea-2026-04-22-10-52 --base main --via-pr --wait-for-merge --cleanup`. This handles commit -> push -> PR create -> merge wait -> worktree prune in one invocation. Executed via the equivalent repo-local entrypoint `node bin/multiagent-safety.js branch finish ...` because `gx` was not on `PATH` in the recovery shell.
+- [x] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff. Recorded PR: `https://github.com/recodeee/gitguardex/pull/288` (`MERGED`, merge commit `da9a190cbd5d6c0ab629743efac8daf01babbcfa`).
+- [x] 4.3 Confirm the sandbox worktree is gone (`git worktree list` no longer shows the agent path; `git branch -a` shows no surviving local/remote refs for the branch). Verified the original worktree path was pruned and cleared the stale `origin/agent/codex/install-suite-split-and-cli-surface-clea-2026-04-22-10-52` tracking ref with `git fetch --prune origin`.
