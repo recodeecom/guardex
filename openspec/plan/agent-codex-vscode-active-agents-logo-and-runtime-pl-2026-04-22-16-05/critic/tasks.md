@@ -2,28 +2,28 @@
 
 ## 1. Spec
 
-- [ ] 1.1 Validate that the plan stays delta-based and does not reopen already-landed Active Agents features without evidence.
-- [ ] 1.2 Validate that risks, consequences, and mitigations are explicit for asset packaging, mirrored sources, and finish-flow cleanup.
+- [x] 1.1 Validate that the plan stays delta-based and does not reopen already-landed Active Agents features without evidence.
+- [x] 1.2 Validate that risks, consequences, and mitigations are explicit for asset packaging, mirrored sources, and finish-flow cleanup.
 
 ## 2. Tests
 
-- [ ] 2.1 Validate that every acceptance criterion maps to a concrete proof surface: installed asset, focused tests, OpenSpec validation, or merge evidence.
-- [ ] 2.2 Validate that the verification steps are concrete and reproducible from the sandbox worktree.
+- [x] 2.1 Validate that every acceptance criterion maps to a concrete proof surface: installed asset, focused tests, OpenSpec validation, or merge evidence.
+- [x] 2.2 Validate that the verification steps are concrete and reproducible from the sandbox worktree.
 
 ## 3. Implementation
 
-- [ ] 3.1 Produce a verdict (`APPROVE`, `ITERATE`, or `REJECT`) on the plan and call out any unnecessary runtime work.
-- [ ] 3.2 Confirm revised drafts resolve prior findings before approval.
-- [ ] 3.3 Publish final quality/risk sign-off notes.
+- [x] 3.1 Produce a verdict (`APPROVE`) on the plan and call out unnecessary runtime work: no provider/session rewrite was needed.
+- [x] 3.2 Confirm revised drafts resolve prior findings before approval.
+- [x] 3.3 Publish final quality/risk sign-off notes through the phase board and implementation notes.
 
 ## 4. Checkpoints
 
-- [ ] [C1] READY - Quality gate checkpoint
+- [x] [C1] READY - Quality gate checkpoint
 
 ## 5. Collaboration
 
-- [ ] 5.1 Owner recorded this lane before edits.
-- [ ] 5.2 Record joined agents / handoffs, or mark `N/A` when solo.
+- [x] 5.1 Owner recorded this lane before edits.
+- [x] 5.2 N/A - solo lane.
 
 ## 6. Cleanup
 

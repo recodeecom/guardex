@@ -14,22 +14,22 @@ One phase is intended to fit into a single Codex or Claude session task.
   - checkpoints: P1
   - summary: Confirm the real gap list: root `logo.png` exists, installer copies only extension folders, and grouped state/lock fallback behavior already ships.
 
-- [ ] [PH02] Decide icon packaging and source-of-truth rules
+- [x] [PH02] Decide icon packaging and source-of-truth rules
   - session: codex
   - checkpoints: A1, C1
-  - summary: Choose whether to keep mirrored `vscode/` + `templates/` sources or collapse them, and lock the icon-asset strategy.
+  - summary: Keep mirrored `vscode/` + `templates/` sources for now and ship a bundled `icon.png` inside each installable extension tree.
 
-- [ ] [PH03] Ship branding plus only the missing runtime delta
+- [x] [PH03] Ship branding plus only the missing runtime delta
   - session: codex
   - checkpoints: E1
-  - summary: Add the branded icon first, then touch `extension.js` or `session-schema.js` only if the audit proves a requested runtime behavior is still absent.
+  - summary: Added the branded icon and manifest wiring; the runtime audit found no missing `extension.js` or `session-schema.js` behavior to patch.
 
-- [ ] [PH04] Refresh docs and focused regression coverage
+- [x] [PH04] Refresh docs and focused regression coverage
   - session: codex
   - checkpoints: W1, V1
-  - summary: Update install/docs language, add payload/runtime tests, and collect operator-facing evidence.
+  - summary: Synced README copy, extended the install payload test, and verified the bundled icon via both focused tests and a manual install smoke check.
 
-- [ ] [PH05] Validate and finish the lane
+- [>] [PH05] Validate and finish the lane
   - session: codex
   - checkpoints: E1, V1
   - summary: Run focused verification, validate OpenSpec artifacts, then finish with `gx branch finish --via-pr --wait-for-merge --cleanup`.

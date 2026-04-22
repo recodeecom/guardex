@@ -20,19 +20,19 @@ This change is complete only when **all** of the following are true:
 
 - [x] 2.1 Create an execution-ready plan workspace under `openspec/plan/agent-codex-vscode-active-agents-logo-and-runtime-pl-2026-04-22-16-05/`.
 - [x] 2.2 Replace generic role task scaffolds with concrete lanes for planner, architect, critic, executor, writer, and verifier.
-- [ ] 2.3 Fold any later architect/critic review back into the plan before code edits start.
+- [x] 2.3 Fold the architecture/critique conclusions back into the implementation lane: keep mirrored sources, bundle `icon.png`, and skip runtime rewrites because the requested state-group/change/lock behavior already ships.
 
 ## 3. Implementation
 
-- [ ] 3.1 Package a branded extension icon using the existing repo `logo.png` and wire it into the installed extension manifest.
-- [ ] 3.2 Audit the current Active Agents code/specs against the requested runtime brief and only land still-missing deltas.
-- [ ] 3.3 Keep `vscode/guardex-active-agents/*`, `templates/vscode/guardex-active-agents/*`, docs, and focused tests aligned.
+- [x] 3.1 Package a branded extension icon using the existing repo `logo.png` and wire it into the installed extension manifest.
+- [x] 3.2 Audit the current Active Agents code/specs against the requested runtime brief and land only the still-missing delta. Result: no `extension.js` or `session-schema.js` changes were needed.
+- [x] 3.3 Keep `vscode/guardex-active-agents/*`, `templates/vscode/guardex-active-agents/*`, docs, and focused tests aligned.
 
 ## 4. Verification
 
-- [ ] 4.1 Run focused extension/install coverage, including `node --test test/vscode-active-agents-session-state.test.js`.
-- [ ] 4.2 Run `openspec validate agent-codex-vscode-active-agents-logo-and-runtime-pl-2026-04-22-16-05 --type change --strict`.
-- [ ] 4.3 Run `openspec validate --specs`.
+- [x] 4.1 Run focused extension/install coverage, including `node --test test/vscode-active-agents-session-state.test.js`.
+- [x] 4.2 Run `openspec validate agent-codex-vscode-active-agents-logo-and-runtime-pl-2026-04-22-16-05 --type change --strict`.
+- [x] 4.3 Run `openspec validate --specs` (`No items found to validate`) and a manual install smoke check proving `icon.png` lands in the installed extension payload.
 
 ## 5. Cleanup (mandatory; run before claiming completion)
 

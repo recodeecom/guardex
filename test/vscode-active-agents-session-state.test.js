@@ -738,9 +738,14 @@ test('install-vscode-active-agents-extension installs the current extension vers
   assert.equal(result.status, 0, result.stderr);
 
   const installedDir = path.join(tempExtensionsDir, 'recodeee.gitguardex-active-agents-0.0.1');
+  const installedManifest = JSON.parse(
+    fs.readFileSync(path.join(installedDir, 'package.json'), 'utf8'),
+  );
   assert.equal(fs.existsSync(installedDir), true);
   assert.equal(fs.existsSync(path.join(installedDir, 'extension.js')), true);
   assert.equal(fs.existsSync(path.join(installedDir, 'session-schema.js')), true);
+  assert.equal(installedManifest.icon, 'icon.png');
+  assert.equal(fs.existsSync(path.join(installedDir, 'icon.png')), true);
   assert.equal(fs.existsSync(staleDir), false);
   assert.match(result.stdout, /Reload the VS Code window/);
 });

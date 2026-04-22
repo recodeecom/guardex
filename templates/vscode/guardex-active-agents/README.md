@@ -17,6 +17,7 @@ node scripts/install-vscode-active-agents-extension.js
 
 What it does:
 
+- Bundles a local GitGuardex icon so repo installs show branded extension metadata inside VS Code.
 - Adds an `Active Agents` view to the Source Control container.
 - Renders one repo node per live Guardex workspace with grouped `ACTIVE AGENTS` and `CHANGES` sections.
 - Splits live sessions inside `ACTIVE AGENTS` into `BLOCKED`, `WORKING NOW`, `IDLE`, `STALLED`, and `DEAD` groups so stuck, active, and inactive lanes stand out immediately.

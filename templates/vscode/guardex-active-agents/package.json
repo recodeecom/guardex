@@ -5,6 +5,7 @@
   "publisher": "recodeee",
   "version": "0.0.1",
   "license": "MIT",
+  "icon": "icon.png",
   "engines": {
     "vscode": "^1.88.0"
   },

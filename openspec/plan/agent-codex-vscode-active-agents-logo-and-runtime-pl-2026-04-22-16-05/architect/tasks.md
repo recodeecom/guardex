@@ -2,28 +2,28 @@
 
 ## 1. Spec
 
-- [ ] 1.1 Decide whether this lane keeps `vscode/guardex-active-agents/` and `templates/vscode/guardex-active-agents/` mirrored or intentionally collapses them to one canonical source.
-- [ ] 1.2 Lock the packaged-icon strategy: committed asset copy inside the extension tree versus any generated/install-time alternative.
+- [x] 1.1 Keep `vscode/guardex-active-agents/` and `templates/vscode/guardex-active-agents/` mirrored for this lane; do not widen scope into source-tree canonicalization.
+- [x] 1.2 Lock the packaged-icon strategy to a committed `icon.png` inside each extension tree, derived from the existing repo `logo.png`.
 
 ## 2. Tests
 
-- [ ] 2.1 Define compatibility checks for VS Code manifest `icon` metadata, installer payload copying, and mirrored-source parity.
-- [ ] 2.2 Validate that any runtime follow-up preserves grouped `ACTIVE AGENTS` / `CHANGES`, lock-aware rows, and `AGENT.lock` fallback behavior.
+- [x] 2.1 Define compatibility checks for VS Code manifest `icon` metadata, installer payload copying, and mirrored-source parity.
+- [x] 2.2 Validate that the runtime follow-up preserves grouped `ACTIVE AGENTS` / `CHANGES`, lock-aware rows, and `AGENT.lock` fallback behavior by leaving `extension.js` and `session-schema.js` untouched.
 
 ## 3. Implementation
 
-- [ ] 3.1 Compare the viable options: in-place patch, source-tree canonicalization, or installer-time asset injection.
-- [ ] 3.2 Record the chosen architecture and guardrails in `planner/plan.md`.
-- [ ] 3.3 Publish architecture sign-off notes for downstream execution.
+- [x] 3.1 Compare the viable options: in-place patch, source-tree canonicalization, or installer-time asset injection.
+- [x] 3.2 Record the chosen architecture and guardrails in `planner/plan.md`.
+- [x] 3.3 Publish architecture sign-off notes through the phase board and implementation notes.
 
 ## 4. Checkpoints
 
-- [ ] [A1] READY - Architecture review checkpoint
+- [x] [A1] READY - Architecture review checkpoint
 
 ## 5. Collaboration
 
-- [ ] 5.1 Owner recorded this lane before edits.
-- [ ] 5.2 Record joined agents / handoffs, or mark `N/A` when solo.
+- [x] 5.1 Owner recorded this lane before edits.
+- [x] 5.2 N/A - solo lane.
 
 ## 6. Cleanup
 
