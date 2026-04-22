@@ -1146,15 +1146,47 @@ test('active-agents extension registers tree and decoration providers', async ()
   assert.equal(rootItems.length, 1);
   assert.equal(rootItems[0].label, 'No active Guardex agents');
   assert.equal(registrations.treeViews[0].badge, undefined);
-  assert.equal(registrations.treeViews[0].message, 'Start a sandbox session to populate this view.');
+  assert.equal(registrations.treeViews[0].message, undefined);
 
   for (const subscription of context.subscriptions) {
     subscription.dispose?.();
   }
 });
 
-test('active-agents extension startAgent command prompts and runs gx branch start in a terminal', async () => {
+test('active-agents extension startAgent command prefers the Guardex launcher in a terminal', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-start-agent-'));
+  fs.mkdirSync(path.join(tempRoot, 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(tempRoot, 'scripts', 'codex-agent.sh'), '#!/usr/bin/env bash\n', 'utf8');
+  const { registrations, vscode } = createMockVscode(tempRoot);
+  registrations.inputResponses.push('demo task', 'codex');
+  const extension = loadExtensionWithMockVscode(vscode);
+  const context = { subscriptions: [] };
+
+  extension.activate(context);
+
+  await registrations.commands.get('gitguardex.activeAgents.startAgent')();
+
+  assert.equal(registrations.terminals.length, 1);
+  assert.deepEqual(registrations.terminals[0].options, {
+    name: `GitGuardex: ${path.basename(tempRoot)}`,
+    cwd: tempRoot,
+  });
+  assert.equal(registrations.terminals[0].shown, true);
+  assert.deepEqual(registrations.terminals[0].sentTexts, [
+    {
+      text: "bash ./scripts/codex-agent.sh 'demo task' 'codex'",
+      addNewLine: true,
+    },
+  ]);
+  assert.deepEqual(registrations.quickPickCalls, []);
+
+  for (const subscription of context.subscriptions) {
+    subscription.dispose?.();
+  }
+});
+
+test('active-agents extension startAgent command falls back to gx branch start without a Guardex launcher', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-start-agent-fallback-'));
   const { registrations, vscode } = createMockVscode(tempRoot);
   registrations.inputResponses.push('demo task', 'codex');
   const extension = loadExtensionWithMockVscode(vscode);

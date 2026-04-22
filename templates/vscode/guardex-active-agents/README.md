@@ -13,7 +13,7 @@ node scripts/install-vscode-active-agents-extension.js
 ```
 
 2. Reload the VS Code window.
-3. In Source Control -> `Active Agents`, use `Start agent` to enter a task + agent name and run `gx branch start`.
+3. In Source Control -> `Active Agents`, use `Start agent` to enter a task + agent name and launch the repo Guardex agent runner. The companion prefers `bash scripts/codex-agent.sh` when present, falls back to `npm run agent:codex --`, and only uses `gx branch start` as a last resort.
 
 What it does:
 

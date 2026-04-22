@@ -3,7 +3,7 @@
   "displayName": "GitGuardex Active Agents",
   "description": "Shows live Guardex sandbox sessions and repo changes inside VS Code Source Control.",
   "publisher": "recodeee",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "license": "MIT",
   "icon": "icon.png",
   "engines": {
@@ -73,7 +73,7 @@
     "viewsWelcome": [
       {
         "view": "gitguardex.activeAgents",
-        "contents": "No active Guardex agents are visible in this workspace yet.\n\n[Start agent](command:gitguardex.activeAgents.startAgent)\n[Open guide](https://github.com/recodeee/gitguardex/blob/main/vscode/guardex-active-agents/README.md#quick-start)\n[Refresh](command:gitguardex.activeAgents.refresh)"
+        "contents": "No live Guardex agents are visible in this workspace yet.\n\nThis view tracks Guardex session files and managed worktree telemetry, not every repo visible in Source Control.\n\n[Start agent](command:gitguardex.activeAgents.startAgent)\n[Open guide](https://github.com/recodeee/gitguardex/blob/main/vscode/guardex-active-agents/README.md#quick-start)\n[Refresh](command:gitguardex.activeAgents.refresh)"
       }
     ],
     "menus": {

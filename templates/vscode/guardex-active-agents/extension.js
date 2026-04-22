@@ -384,6 +384,31 @@ function shellQuote(value) {
   return `'${normalized.replace(/'/g, "'\"'\"'")}'`;
 }
 
+function readPackageJson(repoRoot) {
+  const packageJsonPath = path.join(repoRoot, 'package.json');
+  try {
+    return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  } catch (_error) {
+    return null;
+  }
+}
+
+function resolveStartAgentCommand(repoRoot, details) {
+  const taskArg = shellQuote(details.taskName);
+  const agentArg = shellQuote(details.agentName);
+  const localCodexAgentPath = path.join(repoRoot, 'scripts', 'codex-agent.sh');
+  if (fs.existsSync(localCodexAgentPath)) {
+    return `bash ./scripts/codex-agent.sh ${taskArg} ${agentArg}`;
+  }
+
+  const agentCodexScript = readPackageJson(repoRoot)?.scripts?.['agent:codex'];
+  if (typeof agentCodexScript === 'string' && agentCodexScript.trim().length > 0) {
+    return `npm run agent:codex -- ${taskArg} ${agentArg}`;
+  }
+
+  return `gx branch start ${taskArg} ${agentArg}`;
+}
+
 function sessionDisplayLabel(session) {
   return session?.taskName || session?.label || session?.branch || path.basename(session?.worktreePath || '') || 'session';
 }
@@ -1075,14 +1100,14 @@ async function pickRepoRoot() {
     repoRoot: folder.uri.fsPath,
   }));
   const selection = await vscode.window.showQuickPick?.(picks, {
-    placeHolder: 'Select the Guardex repo where gx branch start should run.',
+    placeHolder: 'Select the Guardex repo where the Start agent launcher should run.',
   });
   return selection?.repoRoot || null;
 }
 
 async function promptStartAgentDetails() {
   const taskName = await vscode.window.showInputBox?.({
-    prompt: 'Task for gx branch start',
+    prompt: 'Task for the Guardex agent launcher',
     placeHolder: 'vscode active agents welcome view',
     ignoreFocusOut: true,
     validateInput: (value) => value.trim() ? undefined : 'Task is required.',
@@ -1092,7 +1117,7 @@ async function promptStartAgentDetails() {
   }
 
   const agentName = await vscode.window.showInputBox?.({
-    prompt: 'Agent name for gx branch start',
+    prompt: 'Agent name for the Guardex agent launcher',
     placeHolder: 'codex',
     value: 'codex',
     ignoreFocusOut: true,
@@ -1124,10 +1149,7 @@ async function startAgentFromPrompt(refresh) {
     cwd: repoRoot,
   });
   terminal?.show(true);
-  terminal?.sendText(
-    `gx branch start ${shellQuote(details.taskName)} ${shellQuote(details.agentName)}`,
-    true,
-  );
+  terminal?.sendText(resolveStartAgentCommand(repoRoot, details), true);
   refresh();
 }
 
@@ -1275,9 +1297,7 @@ class ActiveAgentsProvider {
           tooltip: badgeTooltipParts.join(' · '),
         }
       : undefined;
-    this.treeView.message = sessionCount > 0
-      ? undefined
-      : 'Start a sandbox session to populate this view.';
+    this.treeView.message = undefined;
   }
 
   async syncRepoEntries() {
