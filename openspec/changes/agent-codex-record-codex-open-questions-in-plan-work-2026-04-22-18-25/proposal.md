@@ -8,10 +8,10 @@
 
 ## What Changes
 
-- [ ] Add an `open-questions.md` requirement to the live repo contract and reusable multiagent template.
-- [ ] Add committed `openspec/plan` guidance describing how open questions should be recorded.
-- [ ] Update the plan-workspace scaffold to create `open-questions.md` and point roles/coordinators at it.
-- [ ] Seed this task's plan workspace with the exact three joined-session questions from the user.
+- [x] Add an `open-questions.md` requirement to the live repo contract and reusable multiagent template.
+- [x] Add committed `openspec/plan` guidance describing how open questions should be recorded.
+- [x] Update the plan-workspace scaffold to create `open-questions.md` and point roles/coordinators at it.
+- [x] Seed this task's plan workspace with the exact three joined-session questions from the user.
 
 ## Impact
 

@@ -24,6 +24,6 @@
 
 ## 5. Cleanup
 
-- [ ] 5.1 Finish the branch with `gx branch finish --branch agent/codex/record-codex-open-questions-in-plan-work-2026-04-22-18-25 --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] 5.2 Record PR URL + final `MERGED` state in the handoff.
-- [ ] 5.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) or append `BLOCKED:` and stop.
+- [x] 5.1 Finish the branch with `gx branch finish --branch agent/codex/record-codex-open-questions-in-plan-work-2026-04-22-18-25 --base main --via-pr --wait-for-merge --cleanup`.
+- [x] 5.2 Record PR URL + final `MERGED` state in the handoff. PR `#339`: `https://github.com/recodeee/gitguardex/pull/339`, state `MERGED`, merged at `2026-04-22T16:36:52Z`.
+- [x] 5.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) or append `BLOCKED:` and stop. Verified from `/home/deadpool/Documents/recodee/gitguardex`: the task branch is gone locally, the source worktree is pruned, and only an unrelated dirty worktree remains preserved.
