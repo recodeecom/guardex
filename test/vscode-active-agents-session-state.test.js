@@ -838,6 +838,8 @@ test('install-vscode-active-agents-extension installs the current extension vers
   assert.equal(fs.existsSync(path.join(installedDir, 'session-schema.js')), true);
   assert.equal(installedManifest.icon, 'icon.png');
   assert.equal(installedManifest.version, manifest.version);
+  assert.deepEqual(installedManifest.activationEvents, manifest.activationEvents);
+  assert.equal(installedManifest.activationEvents.includes('onStartupFinished'), true);
   assert.equal(fs.existsSync(path.join(installedDir, 'icon.png')), true);
   assert.equal(fs.existsSync(staleDir), false);
   assert.match(result.stdout, /Reload the VS Code window/);
@@ -859,6 +861,16 @@ test('active-agents extension edits require a higher manifest version than the b
     liveManifest.version,
     templateManifest.version,
     'Live and template Active Agents manifests must stay in sync.',
+  );
+  assert.deepEqual(
+    liveManifest.activationEvents,
+    templateManifest.activationEvents,
+    'Live and template Active Agents activation events must stay in sync.',
+  );
+  assert.equal(
+    liveManifest.activationEvents.includes('onStartupFinished'),
+    true,
+    'Active Agents manifests must activate on VS Code startup.',
   );
   assert.ok(
     compareSimpleSemver(liveManifest.version, baseManifest.version) > 0,
