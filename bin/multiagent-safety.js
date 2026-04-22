@@ -109,33 +109,30 @@ const TEMPLATE_FILES = [
   'vscode/guardex-active-agents/README.md',
 ];
 
-const SCRIPT_SHIMS = [
-  { relativePath: 'scripts/agent-branch-start.sh', kind: 'shell', command: ['branch', 'start'] },
-  { relativePath: 'scripts/agent-branch-finish.sh', kind: 'shell', command: ['branch', 'finish'] },
-  { relativePath: 'scripts/agent-branch-merge.sh', kind: 'shell', command: ['branch', 'merge'] },
-  { relativePath: 'scripts/codex-agent.sh', kind: 'shell', command: ['internal', 'run-shell', 'codexAgent'] },
-  { relativePath: 'scripts/review-bot-watch.sh', kind: 'shell', command: ['internal', 'run-shell', 'reviewBot'] },
-  { relativePath: 'scripts/agent-worktree-prune.sh', kind: 'shell', command: ['worktree', 'prune'] },
-  { relativePath: 'scripts/agent-file-locks.py', kind: 'python', command: ['locks'] },
-  { relativePath: 'scripts/openspec/init-plan-workspace.sh', kind: 'shell', command: ['internal', 'run-shell', 'planInit'] },
-  { relativePath: 'scripts/openspec/init-change-workspace.sh', kind: 'shell', command: ['internal', 'run-shell', 'changeInit'] },
-];
-
-const LEGACY_MANAGED_REPO_FILES = [
+const LEGACY_WORKFLOW_SHIMS = [
   'scripts/agent-branch-start.sh',
   'scripts/agent-branch-finish.sh',
   'scripts/agent-branch-merge.sh',
-  'scripts/agent-session-state.js',
   'scripts/codex-agent.sh',
-  'scripts/guardex-docker-loader.sh',
-  'scripts/install-vscode-active-agents-extension.js',
   'scripts/review-bot-watch.sh',
   'scripts/agent-worktree-prune.sh',
   'scripts/agent-file-locks.py',
-  'scripts/guardex-env.sh',
-  'scripts/install-agent-git-hooks.sh',
   'scripts/openspec/init-plan-workspace.sh',
   'scripts/openspec/init-change-workspace.sh',
+];
+
+const MANAGED_TEMPLATE_DESTINATIONS = TEMPLATE_FILES.map((entry) => toDestinationPath(entry));
+const MANAGED_TEMPLATE_SCRIPT_FILES = MANAGED_TEMPLATE_DESTINATIONS.filter((entry) =>
+  entry.startsWith('scripts/'),
+);
+
+const LEGACY_MANAGED_REPO_FILES = [
+  ...LEGACY_WORKFLOW_SHIMS,
+  'scripts/agent-session-state.js',
+  'scripts/guardex-docker-loader.sh',
+  'scripts/install-vscode-active-agents-extension.js',
+  'scripts/guardex-env.sh',
+  'scripts/install-agent-git-hooks.sh',
   '.githooks/pre-commit',
   '.githooks/pre-push',
   '.githooks/post-merge',
@@ -145,9 +142,8 @@ const LEGACY_MANAGED_REPO_FILES = [
   '.claude/commands/gitguardex.md',
 ];
 
-const REQUIRED_WORKFLOW_FILES = [
-  ...TEMPLATE_FILES.map((entry) => toDestinationPath(entry)),
-  ...SCRIPT_SHIMS.map((entry) => entry.relativePath),
+const REQUIRED_MANAGED_REPO_FILES = [
+  ...MANAGED_TEMPLATE_DESTINATIONS,
   ...HOOK_NAMES.map((entry) => path.posix.join('.githooks', entry)),
   '.omx/state/agent-file-locks.json',
 ];
@@ -205,22 +201,13 @@ const USER_LEVEL_SKILL_ASSETS = [
 ];
 
 const EXECUTABLE_RELATIVE_PATHS = new Set([
-  'scripts/agent-session-state.js',
-  'scripts/guardex-docker-loader.sh',
-  'scripts/install-vscode-active-agents-extension.js',
-  ...SCRIPT_SHIMS.map((entry) => entry.relativePath),
+  ...MANAGED_TEMPLATE_SCRIPT_FILES,
   ...HOOK_NAMES.map((entry) => path.posix.join('.githooks', entry)),
 ]);
 
 const CRITICAL_GUARDRAIL_PATHS = new Set([
   'AGENTS.md',
   ...HOOK_NAMES.map((entry) => path.posix.join('.githooks', entry)),
-  'scripts/agent-branch-start.sh',
-  'scripts/agent-branch-finish.sh',
-  'scripts/agent-branch-merge.sh',
-  'scripts/agent-worktree-prune.sh',
-  'scripts/codex-agent.sh',
-  'scripts/agent-file-locks.py',
   'scripts/guardex-env.sh',
 ]);
 
@@ -239,9 +226,10 @@ const AGENT_WORKTREE_RELATIVE_DIRS = [
 const MANAGED_GITIGNORE_PATHS = [
   '.omx/',
   '.omc/',
-  'scripts/*',
-  'scripts/agent-branch-start.sh',
-  'scripts/agent-file-locks.py',
+  'scripts/agent-session-state.js',
+  'scripts/guardex-docker-loader.sh',
+  'scripts/guardex-env.sh',
+  'scripts/install-vscode-active-agents-extension.js',
   '.githooks',
   'oh-my-codex/',
   LOCK_FILE_RELATIVE,
@@ -311,7 +299,7 @@ const CLI_COMMAND_DESCRIPTIONS = [
   ['locks', 'CLI-owned file lock surface (claim/allow-delete/release/status/validate)'],
   ['worktree', 'CLI-owned worktree cleanup surface (prune)'],
   ['hook', 'Hook dispatch/install surface used by managed shims'],
-  ['migrate', 'Convert legacy repo-local installs to the new shim-based CLI-owned surface'],
+  ['migrate', 'Convert legacy repo-local installs to the zero-copy CLI-owned surface'],
   ['install-agent-skills', 'Install Guardex Codex/Claude skills into the user home'],
   ['protect', 'Manage protected branches (list/add/remove/set/reset)'],
   ['merge', 'Create/reuse an integration lane and merge overlapping agent branches'],
@@ -677,6 +665,27 @@ function runPackageAsset(assetKey, rawArgs, options = {}) {
     stdio: options.stdio || 'pipe',
     timeout: options.timeout,
     env: packageAssetEnv(options.env),
+  });
+}
+
+function repoLocalLegacyScriptPath(repoRoot, relativePath) {
+  const assetPath = path.join(repoRoot, relativePath);
+  return fs.existsSync(assetPath) ? assetPath : null;
+}
+
+function runReviewBotCommand(repoRoot, rawArgs, options = {}) {
+  const legacyScript = repoLocalLegacyScriptPath(repoRoot, 'scripts/review-bot-watch.sh');
+  if (legacyScript) {
+    return run('bash', [legacyScript, ...rawArgs], {
+      cwd: repoRoot,
+      stdio: options.stdio || 'pipe',
+      timeout: options.timeout,
+      env: packageAssetEnv(options.env),
+    });
+  }
+  return runPackageAsset('reviewBot', rawArgs, {
+    ...options,
+    cwd: repoRoot,
   });
 }
 
@@ -1670,7 +1679,6 @@ function ensureParentWorkspaceView(repoRoot, dryRun) {
 function hasGuardexBootstrapFiles(repoRoot) {
   const required = [
     'AGENTS.md',
-    'scripts/agent-branch-start.sh',
     '.githooks/pre-commit',
     '.githooks/pre-push',
     LOCK_FILE_RELATIVE,
@@ -1934,11 +1942,6 @@ function startProtectedBaseSandbox(blocked, { taskName, sandboxSuffix }) {
     return startProtectedBaseSandboxFallback(blocked, sandboxSuffix);
   }
 
-  const startScript = path.join(blocked.repoRoot, 'scripts', 'agent-branch-start.sh');
-  if (!fs.existsSync(startScript)) {
-    return startProtectedBaseSandboxFallback(blocked, sandboxSuffix);
-  }
-
   const startResult = runPackageAsset('branchStart', [
     '--task',
     taskName,
@@ -2088,7 +2091,7 @@ function collectWorktreeDirtyPaths(worktreePath) {
 }
 
 function collectDoctorForceAddPaths(worktreePath) {
-  return REQUIRED_WORKFLOW_FILES
+  return REQUIRED_MANAGED_REPO_FILES
     .filter((relativePath) => relativePath.startsWith('scripts/') || relativePath.startsWith('.githooks/'))
     .filter((relativePath) => fs.existsSync(path.join(worktreePath, relativePath)));
 }
@@ -2124,11 +2127,10 @@ function stripDoctorSandboxLocks(rawContent, branchName) {
 }
 
 function claimDoctorChangedLocks(metadata) {
-  const lockScript = path.join(metadata.worktreePath, 'scripts', 'agent-file-locks.py');
-  if (!fs.existsSync(lockScript) || !metadata.branch) {
+  if (!metadata.branch) {
     return {
       status: 'skipped',
-      note: 'lock helper unavailable in sandbox',
+      note: 'missing sandbox branch metadata',
       changedCount: 0,
       deletedCount: 0,
     };
@@ -2247,13 +2249,6 @@ function doctorFinishFlowIsPending(output) {
 }
 
 function finishDoctorSandboxBranch(blocked, metadata, options = {}) {
-  const finishScript = path.join(metadata.worktreePath, 'scripts', 'agent-branch-finish.sh');
-  if (!fs.existsSync(finishScript)) {
-    return {
-      status: 'skipped',
-      note: `${path.relative(metadata.worktreePath, finishScript)} missing in sandbox`,
-    };
-  }
   if (!hasOriginRemote(blocked.repoRoot)) {
     return {
       status: 'skipped',
@@ -2290,9 +2285,9 @@ function finishDoctorSandboxBranch(blocked, metadata, options = {}) {
   const finishTimeoutMs = Math.max(180_000, (waitTimeoutSeconds + 60) * 1000);
   const waitForMergeArg = options.waitForMerge === false ? '--no-wait-for-merge' : '--wait-for-merge';
 
-  const finishResult = run(
-    'bash',
-    [finishScript, '--branch', metadata.branch, '--base', blocked.branch, '--via-pr', waitForMergeArg, '--cleanup'],
+  const finishResult = runPackageAsset(
+    'branchFinish',
+    ['--branch', metadata.branch, '--base', blocked.branch, '--via-pr', waitForMergeArg, '--cleanup'],
     { cwd: metadata.worktreePath, timeout: finishTimeoutMs },
   );
   if (isSpawnFailure(finishResult)) {
@@ -2363,7 +2358,7 @@ function mergeDoctorSandboxRepairsBackToProtectedBase(options, blocked, metadata
     ...(autoCommitResult.stagedFiles || []),
     ...OMX_SCAFFOLD_DIRECTORIES,
     ...Array.from(OMX_SCAFFOLD_FILES.keys()),
-    ...REQUIRED_WORKFLOW_FILES,
+    ...REQUIRED_MANAGED_REPO_FILES,
     'bin',
     'package.json',
     '.gitignore',
@@ -3387,13 +3382,6 @@ function autoFinishReadyAgentBranches(repoRoot, options = {}) {
     return summary;
   }
 
-  const finishScript = path.join(repoRoot, 'scripts', 'agent-branch-finish.sh');
-  if (!fs.existsSync(finishScript)) {
-    summary.enabled = false;
-    summary.details.push(`Skipped auto-finish sweep (missing ${path.relative(repoRoot, finishScript)}).`);
-    return summary;
-  }
-
   const hasOrigin = gitRun(repoRoot, ['remote', 'get-url', 'origin'], { allowFailure: true }).status === 0;
   if (!hasOrigin) {
     summary.enabled = false;
@@ -4212,11 +4200,6 @@ function gitOutputLines(worktreePath, args) {
 }
 
 function claimLocksForAutoCommit(repoRoot, worktreePath, branch) {
-  const lockScript = path.join(repoRoot, 'scripts', 'agent-file-locks.py');
-  if (!fs.existsSync(lockScript)) {
-    return;
-  }
-
   const changedFiles = uniquePreserveOrder([
     ...gitOutputLines(worktreePath, ['diff', '--name-only', '--', '.', ':(exclude).omx/state/agent-file-locks.json']),
     ...gitOutputLines(worktreePath, ['diff', '--cached', '--name-only', '--', '.', ':(exclude).omx/state/agent-file-locks.json']),
@@ -5173,9 +5156,6 @@ function runInstallInternal(options) {
   for (const templateFile of TEMPLATE_FILES) {
     operations.push(copyTemplateFile(repoRoot, templateFile, Boolean(options.force), Boolean(options.dryRun)));
   }
-  for (const shim of SCRIPT_SHIMS) {
-    operations.push(ensureGeneratedScriptShim(repoRoot, shim, options));
-  }
   for (const hookName of HOOK_NAMES) {
     operations.push(ensureHookShim(repoRoot, hookName, options));
   }
@@ -5219,9 +5199,6 @@ function runFixInternal(options) {
 
   for (const templateFile of TEMPLATE_FILES) {
     operations.push(ensureTemplateFilePresent(repoRoot, templateFile, Boolean(options.dryRun)));
-  }
-  for (const shim of SCRIPT_SHIMS) {
-    operations.push(ensureGeneratedScriptShim(repoRoot, shim, options));
   }
   for (const hookName of HOOK_NAMES) {
     operations.push(ensureHookShim(repoRoot, hookName, options));
@@ -5284,7 +5261,7 @@ function runScanInternal(options) {
   const requiredPaths = [
     ...OMX_SCAFFOLD_DIRECTORIES,
     ...Array.from(OMX_SCAFFOLD_FILES.keys()),
-    ...REQUIRED_WORKFLOW_FILES,
+    ...REQUIRED_MANAGED_REPO_FILES,
   ];
 
   for (const relativePath of requiredPaths) {
@@ -5294,7 +5271,7 @@ function runScanInternal(options) {
         level: 'error',
         code: 'missing-managed-file',
         path: relativePath,
-        message: `Missing managed workflow file: ${relativePath}`,
+        message: `Missing managed repo file: ${relativePath}`,
       });
     }
   }
@@ -5902,15 +5879,7 @@ function doctor(rawArgs) {
 function review(rawArgs) {
   const options = parseReviewArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
-  const reviewScriptPath = path.join(repoRoot, 'scripts', 'review-bot-watch.sh');
-  if (!fs.existsSync(reviewScriptPath)) {
-    throw new Error(
-      `Missing review bot script: ${reviewScriptPath}\n` +
-      `Run '${SHORT_TOOL_NAME} setup --target ${repoRoot}' then '${SHORT_TOOL_NAME} doctor --target ${repoRoot}'.`,
-    );
-  }
-
-  const result = run('bash', [reviewScriptPath, ...options.passthroughArgs], { cwd: repoRoot });
+  const result = runReviewBotCommand(repoRoot, options.passthroughArgs);
   if (isSpawnFailure(result)) {
     throw result.error;
   }
@@ -6049,24 +6018,9 @@ function spawnDetachedAgentProcess({ command, args, cwd, logPath }) {
 function agents(rawArgs) {
   const options = parseAgentsArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
-  const reviewScriptPath = path.join(repoRoot, 'scripts', 'review-bot-watch.sh');
-  const pruneScriptPath = path.join(repoRoot, 'scripts', 'agent-worktree-prune.sh');
   const statePath = agentsStatePathForRepo(repoRoot);
 
   if (options.subcommand === 'start') {
-    if (!fs.existsSync(reviewScriptPath)) {
-      throw new Error(
-        `Missing review bot script: ${reviewScriptPath}\n` +
-          `Run '${SHORT_TOOL_NAME} setup --target ${repoRoot}' then '${SHORT_TOOL_NAME} doctor --target ${repoRoot}'.`,
-      );
-    }
-    if (!fs.existsSync(pruneScriptPath)) {
-      throw new Error(
-        `Missing cleanup script: ${pruneScriptPath}\n` +
-          `Run '${SHORT_TOOL_NAME} setup --target ${repoRoot}' then '${SHORT_TOOL_NAME} doctor --target ${repoRoot}'.`,
-      );
-    }
-
     const existingState = readAgentsState(repoRoot);
     const existingReviewPid = Number.parseInt(String(existingState?.review?.pid || ''), 10);
     const existingCleanupPid = Number.parseInt(String(existingState?.cleanup?.pid || ''), 10);
@@ -6091,8 +6045,17 @@ function agents(rawArgs) {
 
     if (!reviewRunning) {
       reviewPid = spawnDetachedAgentProcess({
-        command: 'bash',
-        args: [reviewScriptPath, '--interval', String(options.reviewIntervalSeconds)],
+        command: process.execPath,
+        args: [
+          path.resolve(__filename),
+          'internal',
+          'run-shell',
+          'reviewBot',
+          '--target',
+          repoRoot,
+          '--interval',
+          String(options.reviewIntervalSeconds),
+        ],
         cwd: repoRoot,
         logPath: reviewLogPath,
       });
@@ -6143,7 +6106,7 @@ function agents(rawArgs) {
       review: {
         pid: reviewPid,
         intervalSeconds: reviewIntervalSeconds,
-        script: reviewScriptPath,
+        script: path.resolve(__filename),
         logPath: reviewLogPath,
       },
       cleanup: {
@@ -6174,7 +6137,7 @@ function agents(rawArgs) {
       return;
     }
 
-    const reviewStop = stopAgentProcessByPid(existingState?.review?.pid, 'review-bot-watch.sh');
+    const reviewStop = stopAgentProcessByPid(existingState?.review?.pid, 'internal run-shell reviewBot');
     const cleanupStop = stopAgentProcessByPid(existingState?.cleanup?.pid, `${path.basename(__filename)} cleanup`);
 
     if (fs.existsSync(statePath)) {
@@ -6870,7 +6833,7 @@ function doctorAudit(rawArgs) {
     ok('git core.hooksPath is .githooks');
   }
 
-  for (const relativePath of REQUIRED_WORKFLOW_FILES) {
+  for (const relativePath of REQUIRED_MANAGED_REPO_FILES) {
     const absolutePath = path.join(repoRoot, relativePath);
     if (!fs.existsSync(absolutePath)) {
       fail(`missing ${relativePath}`);
@@ -7084,7 +7047,10 @@ function internal(rawArgs) {
     throw new Error(`Unknown internal command: ${subcommand || '(missing)'}`);
   }
   const { target, passthrough } = extractTargetedArgs(rest);
-  const result = runPackageAsset(assetKey, passthrough, { cwd: resolveRepoRoot(target) });
+  const repoRoot = resolveRepoRoot(target);
+  const result = assetKey === 'reviewBot'
+    ? runReviewBotCommand(repoRoot, passthrough)
+    : runPackageAsset(assetKey, passthrough, { cwd: repoRoot });
   if (result.stdout) process.stdout.write(result.stdout);
   if (result.stderr) process.stderr.write(result.stderr);
   process.exitCode = result.status;
@@ -7149,7 +7115,7 @@ function migrate(rawArgs) {
   }
 
   const removableLegacyFiles = LEGACY_MANAGED_REPO_FILES.filter(
-    (relativePath) => !REQUIRED_WORKFLOW_FILES.includes(relativePath),
+    (relativePath) => !REQUIRED_MANAGED_REPO_FILES.includes(relativePath),
   );
   const removalOps = removableLegacyFiles.map((relativePath) => removeLegacyManagedRepoFile(repoRoot, relativePath, { dryRun, force }));
   removalOps.push(removeLegacyPackageScripts(repoRoot, dryRun));
@@ -7160,10 +7126,6 @@ function migrate(rawArgs) {
 function cleanup(rawArgs) {
   const options = parseCleanupArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
-  const pruneScript = path.join(repoRoot, 'scripts', 'agent-worktree-prune.sh');
-  if (!fs.existsSync(pruneScript)) {
-    throw new Error(`Missing cleanup script: ${pruneScript}. Run '${SHORT_TOOL_NAME} setup' first.`);
-  }
 
   const args = [];
   if (options.base) {
@@ -7229,11 +7191,6 @@ function cleanup(rawArgs) {
 function merge(rawArgs) {
   const options = parseMergeArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
-  const mergeScript = path.join(repoRoot, 'scripts', 'agent-branch-merge.sh');
-
-  if (!fs.existsSync(mergeScript)) {
-    throw new Error(`Missing merge script: ${mergeScript}. Run '${SHORT_TOOL_NAME} setup' first.`);
-  }
 
   const args = [];
   if (options.base) {
@@ -7269,11 +7226,6 @@ function merge(rawArgs) {
 function finish(rawArgs, defaults = {}) {
   const options = parseFinishArgs(rawArgs, defaults);
   const repoRoot = resolveRepoRoot(options.target);
-  const finishScript = path.join(repoRoot, 'scripts', 'agent-branch-finish.sh');
-
-  if (!fs.existsSync(finishScript)) {
-    throw new Error(`Missing finish script: ${finishScript}. Run '${SHORT_TOOL_NAME} setup' first.`);
-  }
 
   const worktreeEntries = listAgentWorktrees(repoRoot);
   const worktreeByBranch = new Map(worktreeEntries.map((entry) => [entry.branch, entry.worktreePath]));
