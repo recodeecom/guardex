@@ -366,6 +366,9 @@ That GitHub release then triggers `.github/workflows/release.yml`, which perform
 ```sh
 gx prompt                 # full checklist (paste into Codex/Claude)
 gx prompt --exec          # commands only
+gx prompt --part task-loop
+gx prompt --exec --part finish --part cleanup
+gx prompt --list-parts
 gx prompt --snippet       # AGENTS.md managed-block template
 ```
 

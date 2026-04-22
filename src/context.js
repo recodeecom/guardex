@@ -348,7 +348,7 @@ const CLI_COMMAND_DESCRIPTIONS = [
   ['cleanup', 'Prune merged/stale agent branches and worktrees'],
   ['release', 'Create or update the current GitHub release with README-generated notes'],
   ['agents', 'Start/stop repo-scoped review + cleanup bots'],
-  ['prompt', 'Print AI setup checklist (--exec, --snippet)'],
+  ['prompt', 'Print AI setup checklist or named slices (--exec, --part, --list-parts, --snippet)'],
   ['report', 'Security/safety reports (e.g. OpenSSF scorecard)'],
   ['help', 'Show this help output'],
   ['version', 'Print GitGuardex version'],
@@ -369,6 +369,12 @@ const AGENT_BOT_DESCRIPTIONS = [
 const DOCTOR_AUTO_FINISH_DETAIL_LIMIT = 6;
 const DOCTOR_AUTO_FINISH_BRANCH_LABEL_MAX = 72;
 const DOCTOR_AUTO_FINISH_MESSAGE_MAX = 160;
+const AI_SETUP_PART_ALIASES = new Map([
+  ['task', 'task-loop'],
+  ['loop', 'task-loop'],
+  ['reviewbot', 'review-bot'],
+  ['forksync', 'fork-sync'],
+]);
 
 function envFlagIsTruthy(raw) {
   const lowered = String(raw || '').trim().toLowerCase();
@@ -383,35 +389,176 @@ function defaultAgentWorktreeRelativeDir(env = process.env) {
   return isClaudeCodeSession(env) ? CLAUDE_WORKTREE_RELATIVE_DIR : CODEX_WORKTREE_RELATIVE_DIR;
 }
 
-const AI_SETUP_PROMPT = `GitGuardex (gx) setup checklist for Codex/Claude in this repo.
+const AI_SETUP_PARTS = [
+  {
+    name: 'install',
+    label: 'Install',
+    promptLines: [`${GLOBAL_INSTALL_COMMAND} && gh --version`],
+    execLines: [GLOBAL_INSTALL_COMMAND, 'gh --version'],
+  },
+  {
+    name: 'bootstrap',
+    label: 'Bootstrap',
+    promptLines: ['gx setup'],
+    execLines: ['gx setup'],
+  },
+  {
+    name: 'repair',
+    label: 'Repair',
+    promptLines: ['gx doctor'],
+    execLines: ['gx doctor'],
+  },
+  {
+    name: 'task-loop',
+    label: 'Task loop',
+    promptLines: [
+      'gx branch start "<task>" "<agent>"',
+      'then gx locks claim --branch "<agent-branch>" <file...> -> gx branch finish',
+    ],
+    execLines: [
+      'gx branch start "<task>" "<agent>"',
+      'gx locks claim --branch "<agent-branch>" <file...>',
+    ],
+  },
+  {
+    name: 'integrate',
+    label: 'Integrate',
+    promptLines: ['gx merge --branch <agent-a> --branch <agent-b>'],
+    execLines: ['gx merge --branch <agent-a> --branch <agent-b>'],
+  },
+  {
+    name: 'finish',
+    label: 'Finish',
+    promptLines: ['gx finish --all'],
+    execLines: ['gx finish --all'],
+  },
+  {
+    name: 'cleanup',
+    label: 'Cleanup',
+    promptLines: ['gx cleanup'],
+    execLines: ['gx cleanup'],
+  },
+  {
+    name: 'openspec',
+    label: 'OpenSpec',
+    promptLines: ['/opsx:propose -> /opsx:apply -> /opsx:archive'],
+  },
+  {
+    name: 'protect',
+    label: 'Protect',
+    promptLines: ['gx protect add release staging'],
+    execLines: ['gx protect add release staging'],
+  },
+  {
+    name: 'sync',
+    label: 'Sync',
+    promptLines: ['gx sync --check && gx sync'],
+    execLines: ['gx sync --check && gx sync'],
+  },
+  {
+    name: 'review-bot',
+    label: 'Review bot',
+    promptLines: ['install https://github.com/apps/cr-gpt + set OPENAI_API_KEY'],
+  },
+  {
+    name: 'fork-sync',
+    label: 'Fork sync',
+    promptLines: ['install https://github.com/apps/pull + cp .github/pull.yml.example .github/pull.yml'],
+  },
+];
+const AI_SETUP_PARTS_BY_NAME = new Map(AI_SETUP_PARTS.map((part) => [part.name, part]));
+const AI_SETUP_EXEC_PART_NAMES = AI_SETUP_PARTS
+  .filter((part) => Array.isArray(part.execLines))
+  .map((part) => part.name);
 
-1) Install:    ${GLOBAL_INSTALL_COMMAND} && gh --version
-2) Bootstrap:  gx setup
-3) Repair:     gx doctor
-4) Task loop:  gx branch start "<task>" "<agent>"
-               then gx locks claim --branch "<agent-branch>" <file...> -> gx branch finish
-5) Integrate:  gx merge --branch <agent-a> --branch <agent-b>
-6) Finish:     gx finish --all
-7) Cleanup:    gx cleanup
-8) OpenSpec:   /opsx:propose -> /opsx:apply -> /opsx:archive
-9) Optional:   gx protect add release staging
-10) Optional:  gx sync --check && gx sync
-11) Review bot: install https://github.com/apps/cr-gpt + set OPENAI_API_KEY
-12) Fork sync:  install https://github.com/apps/pull + cp .github/pull.yml.example .github/pull.yml
-`;
+function normalizeAiSetupPartName(rawName) {
+  const normalized = String(rawName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/_/g, '-');
+  return AI_SETUP_PART_ALIASES.get(normalized) || normalized;
+}
 
-const AI_SETUP_COMMANDS = `${GLOBAL_INSTALL_COMMAND}
-gh --version
-gx setup
-gx doctor
-gx branch start "<task>" "<agent>"
-gx locks claim --branch "<agent-branch>" <file...>
-gx merge --branch "<agent-a>" --branch "<agent-b>"
-gx finish --all
-gx cleanup
-gx protect add release staging
-gx sync --check && gx sync
-`;
+function listAiSetupPartNames(options = {}) {
+  if (!options.execOnly) return AI_SETUP_PARTS.map((part) => part.name);
+  return AI_SETUP_EXEC_PART_NAMES.slice();
+}
+
+function parseAiSetupPartNames(rawValue) {
+  return String(rawValue || '')
+    .split(',')
+    .map((entry) => normalizeAiSetupPartName(entry))
+    .filter(Boolean);
+}
+
+function resolveAiSetupParts(rawPartNames, options = {}) {
+  const exec = Boolean(options.exec);
+  const requestedPartNames = Array.isArray(rawPartNames) ? rawPartNames : [];
+  const availablePartNames = listAiSetupPartNames();
+  const execCapablePartNames = listAiSetupPartNames({ execOnly: true });
+  const seen = new Set();
+  const resolved = [];
+
+  for (const rawName of requestedPartNames) {
+    const name = normalizeAiSetupPartName(rawName);
+    const part = AI_SETUP_PARTS_BY_NAME.get(name);
+    if (!part) {
+      throw new Error(
+        `Unknown prompt part: ${rawName}. Available parts: ${availablePartNames.join(', ')}`,
+      );
+    }
+    if (exec && !Array.isArray(part.execLines)) {
+      throw new Error(
+        `Prompt part '${name}' is not available with --exec. ` +
+        `Exec-capable parts: ${execCapablePartNames.join(', ')}`,
+      );
+    }
+    if (seen.has(name)) continue;
+    seen.add(name);
+    resolved.push(part);
+  }
+
+  return resolved;
+}
+
+function renderFullAiSetupPrompt() {
+  const lines = ['GitGuardex (gx) setup checklist for Codex/Claude in this repo.', ''];
+  const indentWidth = 18;
+
+  AI_SETUP_PARTS.forEach((part, index) => {
+    const [lead, ...tail] = part.promptLines;
+    const prefix = `${index + 1}) ${part.label}:`;
+    lines.push(`${prefix.padEnd(indentWidth)}${lead}`);
+    tail.forEach((line) => lines.push(`${' '.repeat(indentWidth)}${line}`));
+  });
+
+  return `${lines.join('\n')}\n`;
+}
+
+function renderPartialAiSetupPrompt(parts) {
+  return `${parts
+    .map((part) => `${part.label}:\n${part.promptLines.join('\n')}`)
+    .join('\n\n')}\n`;
+}
+
+function renderAiSetupCommands(parts) {
+  return `${parts.flatMap((part) => part.execLines).join('\n')}\n`;
+}
+
+function renderAiSetupPrompt(options = {}) {
+  const exec = Boolean(options.exec);
+  const requestedPartNames = Array.isArray(options.parts) ? options.parts : [];
+  if (requestedPartNames.length === 0) {
+    return exec
+      ? renderAiSetupCommands(resolveAiSetupParts(AI_SETUP_EXEC_PART_NAMES, { exec: true }))
+      : renderFullAiSetupPrompt();
+  }
+  const parts = resolveAiSetupParts(requestedPartNames, { exec });
+  return exec ? renderAiSetupCommands(parts) : renderPartialAiSetupPrompt(parts);
+}
+
+const AI_SETUP_PROMPT = renderAiSetupPrompt();
+const AI_SETUP_COMMANDS = renderAiSetupPrompt({ exec: true });
 
 const SCORECARD_RISK_BY_CHECK = {
   'Dangerous-Workflow': 'Critical',
@@ -511,6 +658,9 @@ module.exports = {
   envFlagIsTruthy,
   isClaudeCodeSession,
   defaultAgentWorktreeRelativeDir,
+  listAiSetupPartNames,
+  parseAiSetupPartNames,
+  renderAiSetupPrompt,
   AI_SETUP_PROMPT,
   AI_SETUP_COMMANDS,
   SCORECARD_RISK_BY_CHECK,

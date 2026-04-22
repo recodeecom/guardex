@@ -95,6 +95,49 @@ test('prompt --exec outputs command-only checklist', () => {
   assert.doesNotMatch(result.stdout, /GitGuardex \(gx\) setup checklist/);
 });
 
+test('prompt --part outputs only the selected checklist slices', () => {
+  const repoDir = initRepo();
+  const result = runNode(['prompt', '--part', 'task-loop', '--part', 'finish'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^Task loop:/m);
+  assert.match(result.stdout, /gx branch start "<task>" "<agent>"/);
+  assert.match(result.stdout, /^Finish:/m);
+  assert.match(result.stdout, /gx finish --all/);
+  assert.doesNotMatch(result.stdout, /GitGuardex \(gx\) setup checklist/);
+  assert.doesNotMatch(result.stdout, /^Cleanup:/m);
+  assert.doesNotMatch(result.stdout, /\/opsx:propose/);
+});
+
+test('prompt --exec --part outputs only selected command-capable slices', () => {
+  const repoDir = initRepo();
+  const result = runNode(['prompt', '--exec', '--part', 'install', '--part', 'task-loop'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^npm i -g @imdeadpool\/guardex/m);
+  assert.match(result.stdout, /^gh --version$/m);
+  assert.match(result.stdout, /^gx branch start "<task>" "<agent>"$/m);
+  assert.match(result.stdout, /^gx locks claim --branch "<agent-branch>" <file\.\.\.>$/m);
+  assert.doesNotMatch(result.stdout, /^gx cleanup$/m);
+  assert.doesNotMatch(result.stdout, /\/opsx:propose/);
+});
+
+test('prompt --list-parts prints the available prompt slices', () => {
+  const repoDir = initRepo();
+  const result = runNode(['prompt', '--list-parts'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /^install$/m);
+  assert.match(result.stdout, /^task-loop$/m);
+  assert.match(result.stdout, /^openspec$/m);
+  assert.match(result.stdout, /^review-bot$/m);
+});
+
+test('prompt --exec rejects prompt-only parts', () => {
+  const repoDir = initRepo();
+  const result = runNode(['prompt', '--exec', '--part', 'openspec'], repoDir);
+  assert.equal(result.status, 1, 'exec mode should reject prompt-only parts');
+  assert.match(result.stderr, /Prompt part 'openspec' is not available with --exec/);
+  assert.match(result.stderr, /Exec-capable parts:/);
+});
+
 
 test('deprecated copy-prompt alias still works and warns', () => {
   const repoDir = initRepo();
