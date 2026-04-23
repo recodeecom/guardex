@@ -1644,7 +1644,7 @@ test('active-agents extension groups live sessions under a repo node', async () 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
   assert.equal(repoItem.label, path.basename(tempRoot));
-  assert.equal(repoItem.description, '0 working agents · 1 idle agent · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '0 working · 1 thinking');
 
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
@@ -1654,7 +1654,7 @@ test('active-agents extension groups live sessions under a repo node', async () 
   const overviewSection = await getSectionByLabel(provider, repoItem, 'Overview');
   const [summaryItem] = await provider.getChildren(overviewSection);
   assert.equal(summaryItem.label, 'Summary');
-  assert.equal(summaryItem.description, repoItem.description);
+  assert.equal(summaryItem.description, '0 working · 1 thinking · 0 unassigned · 0 locked · 0 conflicts');
 
   const idleSection = await getSectionByLabel(provider, repoItem, 'Idle / thinking');
   assert.equal(idleSection.description, '1');
@@ -1663,7 +1663,7 @@ test('active-agents extension groups live sessions under a repo node', async () 
   assert.equal(worktreeItem, null);
   assert.equal(sessionItem.label, 'live-task');
   assert.equal(sessionItem.session.branch, 'agent/codex/live-task');
-  assert.match(sessionItem.description, /^Idle: codex · via OpenAI/);
+  assert.match(sessionItem.description, /^Idle · /);
   assert.equal(sessionItem.iconPath.id, 'comment-discussion');
   assert.equal(sessionItem.resourceUri.scheme, 'gitguardex-agent');
   assert.equal(
@@ -1672,7 +1672,7 @@ test('active-agents extension groups live sessions under a repo node', async () 
   );
   assert.deepEqual(registrations.treeViews[0].badge, {
     value: 1,
-    tooltip: repoItem.description,
+    tooltip: '0 working · 1 thinking · 0 unassigned · 0 locked · 0 conflicts',
   });
   assert.equal(registrations.treeViews[0].message, undefined);
   assert.equal(
@@ -1732,8 +1732,8 @@ test('active-agents extension shows provider and snapshot identity badges', asyn
   const idleSection = await getSectionByLabel(provider, repoItem, 'Idle / thinking');
   const codexItem = await getSessionByBranch(provider, idleSection, 'agent/codex/provider-task');
   const claudeItem = await getSessionByBranch(provider, idleSection, 'agent/claude/provider-task');
-  assert.match(codexItem.description, /^Idle: codex · via OpenAI · snapshot nagyviktor@edixa\.com/);
-  assert.match(claudeItem.description, /^Idle: claude · via Claude/);
+  assert.match(codexItem.description, /^Idle · /);
+  assert.match(claudeItem.description, /^Idle · /);
 
   const decorationProvider = registrations.decorationProviders[0];
   const codexDecoration = decorationProvider.provideFileDecoration(vscode.Uri.parse(
@@ -1742,8 +1742,8 @@ test('active-agents extension shows provider and snapshot identity badges', asyn
   const claudeDecoration = decorationProvider.provideFileDecoration(vscode.Uri.parse(
     `gitguardex-agent://${sessionSchema.sanitizeBranchForFile('agent/claude/provider-task')}`,
   ));
-  assert.equal(codexDecoration.badge, 'N');
-  assert.equal(codexDecoration.tooltip, 'Snapshot nagyviktor@edixa.com');
+  assert.equal(codexDecoration.badge, 'AI');
+  assert.equal(codexDecoration.tooltip, 'OpenAI session via codex');
   assert.equal(claudeDecoration.badge, 'CL');
   assert.equal(claudeDecoration.tooltip, 'Claude session via claude');
 
@@ -1965,7 +1965,7 @@ test('active-agents extension shows grouped repo changes beside active agents', 
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 1 unassigned change · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working · 1 unassigned');
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
     'Working now',
@@ -1981,15 +1981,18 @@ test('active-agents extension shows grouped repo changes beside active agents', 
   assert.equal(worktreeItem, null);
   assert.equal(sessionItem.label, latestTaskPreview);
   assert.equal(sessionItem.session.branch, 'agent/codex/live-task');
-  assert.match(sessionItem.description, /^Working: codex · via OpenAI · 2 changed files/);
+  assert.match(sessionItem.description, /^Working · 2 files · /);
   assert.match(sessionItem.tooltip, /Recent Fix cave hivemind hero layout/);
   assert.equal(sessionItem.iconPath.id, 'loading~spin');
   assert.equal(sessionItem.iconPath.color.id, 'gitDecoration.addedResourceForeground');
   const sessionDetails = await provider.getChildren(sessionItem);
-  assert.equal(sessionDetails.find((item) => item.label === 'Top files')?.description, 'src/nested.js, tracked.txt');
+  assert.equal(sessionDetails.some((item) => item.label === 'Top files'), false);
+  assert.equal(sessionDetails.some((item) => item.label === 'Provider'), false);
+  assert.ok(sessionDetails.find((item) => item.label === 'Branch'));
+  assert.ok(sessionDetails.find((item) => item.label === 'Worktree'));
   assert.deepEqual(registrations.treeViews[0].badge, {
     value: 1,
-    tooltip: repoItem.description,
+    tooltip: '1 working · 0 thinking · 1 unassigned · 0 locked · 0 conflicts',
   });
 
   const [unassignedChangeItem] = await provider.getChildren(unassignedSection);
@@ -2002,7 +2005,7 @@ test('active-agents extension shows grouped repo changes beside active agents', 
   const rawWorkingSection = await getSectionByLabel(provider, activeAgentTree, 'WORKING NOW');
   const [rawWorktreeItem] = await provider.getChildren(rawWorkingSection);
   assert.equal(rawWorktreeItem.label, latestTaskPreview);
-  assert.equal(rawWorktreeItem.description, 'working: codex');
+  assert.equal(rawWorktreeItem.description, 'codex · 2 files');
   const [rawSessionItem] = await provider.getChildren(rawWorktreeItem);
   assert.equal(rawSessionItem.label, latestTaskPreview);
   assert.match(rawSessionItem.description, /^Working · 2 files · /);
@@ -2095,7 +2098,7 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working');
 
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
@@ -2109,7 +2112,7 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
   const [sessionItem] = await provider.getChildren(projectFolder);
   assert.equal(sessionItem.label, 'Implement live worktree telemetry');
   assert.equal(sessionItem.session.branch, 'agent/codex/lock-visible-task');
-  assert.match(sessionItem.description, /^Working: codex · via OpenAI · snapshot nagyviktor@edixa\.com · 1 changed file/);
+  assert.match(sessionItem.description, /^Working · 1 file · /);
   assert.equal(sessionItem.iconPath.color.id, 'gitDecoration.addedResourceForeground');
   assert.equal(sessionItem.session.snapshotName, 'nagyviktor@edixa.com');
   assert.match(sessionItem.tooltip, /Telemetry updated 2026-04-22T09:01:00.000Z/);
@@ -2123,7 +2126,7 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
   assert.equal(rawProjectFolder.description, '1 agent · 1 file');
   const [rawWorktreeItem] = await provider.getChildren(rawProjectFolder);
   assert.equal(rawWorktreeItem.label, 'Implement live worktree telemetry');
-  assert.equal(rawWorktreeItem.description, 'working: codex · snapshot nagyviktor@edixa.com');
+  assert.equal(rawWorktreeItem.description, 'codex · 1 file');
   assert.equal(
     rawWorktreeItem.resourceUri.toString(),
     `gitguardex-agent://${sessionSchema.sanitizeBranchForFile('agent/codex/lock-visible-task')}`,
@@ -2135,8 +2138,8 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
   const snapshotDecoration = registrations.decorationProviders[0].provideFileDecoration(vscode.Uri.parse(
     `gitguardex-agent://${sessionSchema.sanitizeBranchForFile('agent/codex/lock-visible-task')}`,
   ));
-  assert.equal(snapshotDecoration.badge, 'N');
-  assert.equal(snapshotDecoration.tooltip, 'Snapshot nagyviktor@edixa.com');
+  assert.equal(snapshotDecoration.badge, 'AI');
+  assert.equal(snapshotDecoration.tooltip, 'OpenAI session via codex');
 
   for (const subscription of context.subscriptions) {
     subscription.dispose?.();
@@ -2189,7 +2192,7 @@ test('active-agents extension shows session health from active-session records',
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
   assert.equal(worktreeItem, null);
-  assert.match(sessionItem.description, /^Working: codex · via OpenAI · 1 changed file · 45\/100/);
+  assert.match(sessionItem.description, /^Working · 1 file · /);
   assert.match(sessionItem.tooltip, /Session health 45\/100 · Inefficient/);
   const sessionDetails = await provider.getChildren(sessionItem);
   const sessionHealthItem = sessionDetails.find((item) => item.label === 'Session health');
@@ -2269,7 +2272,7 @@ test('active-agents extension shows session health from AGENT.lock fallback tele
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
   assert.equal(worktreeItem, null);
-  assert.match(sessionItem.description, /^Working: codex · via OpenAI · snapshot snapshot-a · 1 changed file · 45\/100/);
+  assert.match(sessionItem.description, /^Working · 1 file · /);
   assert.match(sessionItem.tooltip, /Session health 45\/100 · Inefficient/);
   const sessionDetails = await provider.getChildren(sessionItem);
   const sessionHealthItem = sessionDetails.find((item) => item.label === 'Session health');
@@ -2309,13 +2312,13 @@ test('active-agents extension surfaces plain managed worktrees from workspace fa
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working');
 
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
   assert.equal(worktreeItem, null);
   assert.equal(sessionItem.session.branch, 'agent/codex/plain-visible-task');
-  assert.match(sessionItem.description, /^Working: codex · via OpenAI · 1 changed file/);
+  assert.match(sessionItem.description, /^Working · 1 file · /);
   assert.match(sessionItem.tooltip, /Started /);
 
   for (const subscription of context.subscriptions) {
@@ -2387,7 +2390,7 @@ test('active-agents extension decorates sessions and repo changes from the lock 
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 1 unassigned change · 3 locked files · 2 conflicts');
+  assert.equal(repoItem.description, '1 working · 1 unassigned · 2 conflicts');
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const unassignedSection = await getSectionByLabel(provider, repoItem, 'Unassigned changes');
   const advancedSection = await getSectionByLabel(provider, repoItem, 'Advanced details');
@@ -2395,14 +2398,14 @@ test('active-agents extension decorates sessions and repo changes from the lock 
   assert.equal(worktreeItem, null);
   assert.equal(sessionItem.label, 'live-task');
   assert.equal(sessionItem.session.branch, branch);
-  assert.match(sessionItem.tooltip, /1 lock/);
+  assert.match(sessionItem.tooltip, /Locked/);
   assert.match(sessionItem.tooltip, /Conflicts 1/);
 
   const activeAgentTree = await getSectionByLabel(provider, advancedSection, 'Active agent tree');
   const rawWorkingSection = await getSectionByLabel(provider, activeAgentTree, 'WORKING NOW');
   const worktreeGroup = await getChildByLabel(provider, rawWorkingSection, 'live-task');
   assert.equal(worktreeGroup.iconPath.id, 'git-branch');
-  assert.equal(worktreeGroup.description, 'working: codex');
+  assert.equal(worktreeGroup.description, 'codex · 1 file · 1 lock');
   assert.equal(worktreeGroup.resourceUri.toString(), `gitguardex-agent://${sessionSchema.sanitizeBranchForFile(branch)}`);
   const [sessionGroup] = await provider.getChildren(worktreeGroup);
   assert.equal(sessionGroup.label, 'live-task');
@@ -2418,7 +2421,7 @@ test('active-agents extension decorates sessions and repo changes from the lock 
   assert.match(changeItem.tooltip, /Locked by agent\/codex\/other-task/);
   assert.deepEqual(registrations.treeViews[0].badge, {
     value: 1,
-    tooltip: repoItem.description,
+    tooltip: '1 working · 0 thinking · 1 unassigned · 3 locked · 2 conflicts',
   });
   assert.equal(
     registrations.executedCommands.some((entry) => (
@@ -2638,7 +2641,7 @@ test('active-agents extension groups blocked, working, idle, stalled, and dead s
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '2 working agents · 2 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '2 working · 2 thinking');
 
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
@@ -2656,19 +2659,19 @@ test('active-agents extension groups blocked, working, idle, stalled, and dead s
   const idleItem = await getSessionByBranch(provider, idleThinkingSection, 'agent/codex/idle-task');
   const stalledItem = await getSessionByBranch(provider, idleThinkingSection, 'agent/codex/stalled-task');
   const deadItem = await getSessionByBranch(provider, idleThinkingSection, 'agent/codex/dead-task');
-  assert.match(blockedItem.description, /^Blocked: codex · via OpenAI/);
+  assert.match(blockedItem.description, /^Blocked · /);
   assert.equal(blockedItem.iconPath.id, 'warning');
-  assert.match(workingItem.description, /^Working: codex · via OpenAI · 1 changed file/);
+  assert.match(workingItem.description, /^Working · 1 file · /);
   assert.equal(workingItem.iconPath.id, 'loading~spin');
-  assert.match(idleItem.description, /^Idle: codex · via OpenAI/);
+  assert.match(idleItem.description, /^Idle · /);
   assert.equal(idleItem.iconPath.id, 'comment-discussion');
-  assert.match(stalledItem.description, /^Stale: codex · via OpenAI/);
+  assert.match(stalledItem.description, /^Stale · /);
   assert.equal(stalledItem.iconPath.id, 'clock');
-  assert.match(deadItem.description, /^Dead: codex · via OpenAI/);
+  assert.match(deadItem.description, /^Dead · /);
   assert.equal(deadItem.iconPath.id, 'error');
   assert.deepEqual(registrations.treeViews[0].badge, {
     value: 5,
-    tooltip: repoItem.description,
+    tooltip: '2 working · 2 thinking · 0 unassigned · 0 locked · 0 conflicts · 1 dead',
   });
 
   for (const subscription of context.subscriptions) {
@@ -2904,7 +2907,7 @@ test('active-agents extension decorates sessions and repo changes from the lock 
   assert.equal(worktreeItem, null);
   assert.equal(sessionItem.label, 'live-task');
   assert.equal(sessionItem.session.branch, branch);
-  assert.match(sessionItem.tooltip, /1 lock/);
+  assert.match(sessionItem.tooltip, /Locked/);
 
   const [changeItem] = await provider.getChildren(unassignedSection);
   assert.equal(changeItem.label, 'root-file.txt');

@@ -72,6 +72,70 @@ const SESSION_PROVIDER_BRANDS = {
     badge: 'CL',
   },
 };
+const SESSION_FILE_GROUPS = [
+  { key: 'code', label: 'Code', iconId: 'symbol-file' },
+  { key: 'tests', label: 'Tests', iconId: 'beaker' },
+  { key: 'openspec', label: 'OpenSpec', iconId: 'note' },
+  { key: 'config', label: 'Config', iconId: 'settings-gear' },
+  { key: 'other', label: 'Other', iconId: 'files' },
+];
+const CODE_FILE_EXTENSIONS = new Set([
+  '.c',
+  '.cc',
+  '.cpp',
+  '.cs',
+  '.css',
+  '.go',
+  '.h',
+  '.hpp',
+  '.html',
+  '.java',
+  '.js',
+  '.jsx',
+  '.kt',
+  '.mjs',
+  '.cjs',
+  '.mdx',
+  '.php',
+  '.py',
+  '.rb',
+  '.rs',
+  '.scss',
+  '.sh',
+  '.sql',
+  '.swift',
+  '.ts',
+  '.tsx',
+  '.vue',
+]);
+const CONFIG_FILE_NAMES = new Set([
+  '.editorconfig',
+  '.gitignore',
+  '.npmrc',
+  '.prettierignore',
+  '.prettierrc',
+  'biome.json',
+  'bunfig.toml',
+  'dockerfile',
+  'eslint.config.js',
+  'eslint.config.mjs',
+  'jsconfig.json',
+  'package-lock.json',
+  'package.json',
+  'pnpm-lock.yaml',
+  'pnpm-workspace.yaml',
+  'prettier.config.js',
+  'prettier.config.mjs',
+  'tailwind.config.js',
+  'tailwind.config.cjs',
+  'tailwind.config.ts',
+  'tsconfig.json',
+  'turbo.json',
+  'vite.config.js',
+  'vite.config.ts',
+  'webpack.config.js',
+  'yarn.lock',
+]);
 
 function iconColorId(iconId) {
   switch (iconId) {
@@ -172,6 +236,10 @@ function sessionIdleDecoration(session, now = Date.now()) {
 }
 
 function formatCountLabel(count, singular, plural = `${singular}s`) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+function formatShortCountLabel(count, singular, plural = singular) {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
@@ -293,7 +361,7 @@ function sessionSnapshotDecoration(session) {
 }
 
 function sessionIdentityDecoration(session) {
-  return sessionSnapshotDecoration(session) || sessionProviderDecoration(session);
+  return sessionProviderDecoration(session) || sessionSnapshotDecoration(session);
 }
 
 function stringListsEqual(left, right) {
@@ -445,6 +513,68 @@ function summarizeCompactPaths(paths, maxCount = SESSION_TOP_FILE_COUNT) {
   return compactPaths.join(', ');
 }
 
+function sessionChangeGroupKey(change) {
+  const relativePath = normalizeRelativePath(change?.relativePath).toLowerCase();
+  if (!relativePath) {
+    return 'other';
+  }
+
+  const baseName = path.posix.basename(relativePath);
+  if (relativePath === 'openspec' || relativePath.startsWith('openspec/')) {
+    return 'openspec';
+  }
+  if (/(^|\/)(__tests__|test|tests)(\/|$)/.test(relativePath) || /\.(test|spec)\.[^.\/]+$/.test(baseName)) {
+    return 'tests';
+  }
+  if (
+    relativePath.startsWith('.github/')
+    || relativePath.startsWith('.vscode/')
+    || relativePath.startsWith('.claude/')
+    || relativePath.startsWith('.codex/')
+    || relativePath.startsWith('.omx/')
+    || relativePath.startsWith('.omc/')
+    || baseName.startsWith('.env')
+    || CONFIG_FILE_NAMES.has(baseName)
+  ) {
+    return 'config';
+  }
+  if (
+    relativePath.startsWith('app/')
+    || relativePath.startsWith('bin/')
+    || relativePath.startsWith('lib/')
+    || relativePath.startsWith('scripts/')
+    || relativePath.startsWith('server/')
+    || relativePath.startsWith('src/')
+    || relativePath.startsWith('templates/')
+    || relativePath.startsWith('vscode/')
+    || CODE_FILE_EXTENSIONS.has(path.posix.extname(baseName))
+  ) {
+    return 'code';
+  }
+  return 'other';
+}
+
+function buildSessionFileGroupItems(session) {
+  const groups = new Map(SESSION_FILE_GROUPS.map(({ key }) => [key, []]));
+  for (const change of session?.touchedChanges || []) {
+    const groupKey = sessionChangeGroupKey(change);
+    groups.get(groupKey)?.push(change);
+  }
+
+  return SESSION_FILE_GROUPS
+    .map(({ key, label, iconId }) => {
+      const groupChanges = groups.get(key) || [];
+      if (groupChanges.length === 0) {
+        return null;
+      }
+      return new SectionItem(label, buildChangeTreeNodes(groupChanges), {
+        description: String(groupChanges.length),
+        iconId,
+      });
+    })
+    .filter(Boolean);
+}
+
 function isProtectedBranchName(branch) {
   return branch === 'main' || branch === 'dev';
 }
@@ -578,6 +708,10 @@ function buildSessionHealthTooltip(session) {
   ].filter(Boolean).join('\n');
 }
 
+function sessionCompactTimeLabel(session) {
+  return session.lastActiveLabel || session.elapsedLabel || formatElapsedFrom(session.startedAt);
+}
+
 function buildSessionTopFiles(session) {
   return uniqueStringList((session?.worktreeChangedPaths || [])
     .map(normalizeRelativePath)
@@ -617,46 +751,30 @@ function changeRiskBadges(change) {
   ].filter(Boolean));
 }
 
-function buildSessionCardDescription(session) {
-  const provider = resolveSessionProvider(session);
-  const statusAgentLabel = `${sessionStatusLabel(session)}: ${session.agentName || 'agent'}`;
-  const descriptionParts = [
-    statusAgentLabel,
-    provider?.label ? `via ${provider.label}` : '',
-    sessionSnapshotDescription(session),
-    session.deltaLabel || '',
-    session.changeCount > 0 ? formatCountLabel(session.changeCount, 'changed file') : '',
-    session.lockCount > 0 ? formatCountLabel(session.lockCount, 'lock') : '',
-    buildSessionHealthCompactLabel(session),
-    session.freshnessLabel || '',
-    session.lastActiveLabel ? `${session.lastActiveLabel} ago` : '',
-  ].filter(Boolean);
-  return descriptionParts.join(' · ');
-}
-
-function buildRawSessionDescription(session) {
-  const provider = resolveSessionProvider(session);
+function buildSessionCompactDescription(session) {
   const descriptionParts = [sessionStatusLabel(session)];
   const fileCountLabel = sessionFileCountLabel(session);
   if (fileCountLabel) {
     descriptionParts.push(fileCountLabel);
   }
-  if (provider?.label) {
-    descriptionParts.push(provider.label);
+  const timeLabel = sessionCompactTimeLabel(session);
+  if (timeLabel) {
+    descriptionParts.push(timeLabel);
   }
-  const snapshot = sessionSnapshotDescription(session);
-  if (snapshot) {
-    descriptionParts.push(snapshot);
-  }
-  descriptionParts.push(session.elapsedLabel || formatElapsedFrom(session.startedAt));
-  const sessionHealthLabel = buildSessionHealthCompactLabel(session);
-  if (sessionHealthLabel) {
-    descriptionParts.push(sessionHealthLabel);
-  }
-  if (session.lockCount > 0) {
+  if (session.conflictCount > 0) {
+    descriptionParts.push(formatCountLabel(session.conflictCount, 'conflict'));
+  } else if (session.lockCount > 0) {
     descriptionParts.push(formatCountLabel(session.lockCount, 'lock'));
   }
   return descriptionParts.join(' · ');
+}
+
+function buildSessionCardDescription(session) {
+  return buildSessionCompactDescription(session);
+}
+
+function buildRawSessionDescription(session) {
+  return buildSessionCompactDescription(session);
 }
 
 function buildSessionTooltip(session, description) {
@@ -699,33 +817,32 @@ function buildUnassignedChangeDescription(change) {
 
 function buildWorktreeBranchDescription(sessions) {
   const sessionList = Array.isArray(sessions) ? sessions : [];
-  const primarySession = sessionList[0] || null;
-  if (!primarySession) {
+  if (sessionList.length === 0) {
     return '';
   }
 
-  const descriptionParts = [
-    `${sessionStatusLabel(primarySession).toLowerCase()}: ${primarySession.agentName || 'agent'}`,
-    sessionSnapshotDescription(primarySession),
-  ];
-  if (sessionList.length > 1) {
-    descriptionParts.push(formatCountLabel(sessionList.length, 'agent'));
-  }
-  return descriptionParts.filter(Boolean).join(' · ');
+  const changedCount = sessionList.reduce((total, session) => total + (session.changeCount || 0), 0);
+  return buildWorktreeDescription(sessionList, changedCount);
 }
 
 function buildOverviewDescription(summary) {
   return [
-    formatCountLabel(summary?.workingCount || 0, 'working agent'),
-    formatCountLabel(summary?.idleCount || 0, 'idle agent'),
-    formatCountLabel(summary?.unassignedChangeCount || 0, 'unassigned change'),
-    formatCountLabel(summary?.lockedFileCount || 0, 'locked file'),
-    formatCountLabel(summary?.conflictCount || 0, 'conflict'),
-  ].join(' · ');
+    formatShortCountLabel(summary?.workingCount || 0, 'working'),
+    formatShortCountLabel(summary?.idleCount || 0, 'thinking'),
+    formatShortCountLabel(summary?.unassignedChangeCount || 0, 'unassigned'),
+    formatShortCountLabel(summary?.lockedFileCount || 0, 'locked'),
+    formatShortCountLabel(summary?.conflictCount || 0, 'conflict', 'conflicts'),
+    summary?.deadCount ? formatShortCountLabel(summary.deadCount, 'dead') : '',
+  ].filter(Boolean).join(' · ');
 }
 
 function buildRepoDescription(summary) {
-  return buildOverviewDescription(summary);
+  return [
+    formatShortCountLabel(summary?.workingCount || 0, 'working'),
+    summary?.idleCount ? formatShortCountLabel(summary.idleCount, 'thinking') : '',
+    summary?.unassignedChangeCount ? formatShortCountLabel(summary.unassignedChangeCount, 'unassigned') : '',
+    summary?.conflictCount ? formatShortCountLabel(summary.conflictCount, 'conflict', 'conflicts') : '',
+  ].filter(Boolean).join(' · ');
 }
 
 function buildRepoTooltip(repoRoot, summary) {
@@ -733,6 +850,29 @@ function buildRepoTooltip(repoRoot, summary) {
     repoRoot,
     buildOverviewDescription(summary),
   ].join('\n');
+}
+
+function buildOverviewItems(summary) {
+  return [
+    new DetailItem('Agents', [
+      formatShortCountLabel(summary?.workingCount || 0, 'working'),
+      formatShortCountLabel(summary?.idleCount || 0, 'thinking'),
+    ].join(' · '), {
+      iconId: 'git-branch',
+    }),
+    new DetailItem('Files', [
+      formatShortCountLabel(summary?.unassignedChangeCount || 0, 'unassigned'),
+      formatShortCountLabel(summary?.lockedFileCount || 0, 'locked'),
+    ].join(' · '), {
+      iconId: 'files',
+    }),
+    new DetailItem('State', [
+      formatShortCountLabel(summary?.conflictCount || 0, 'conflict', 'conflicts'),
+      summary?.deadCount ? formatShortCountLabel(summary.deadCount, 'dead') : '',
+    ].filter(Boolean).join(' · '), {
+      iconId: summary?.conflictCount ? 'warning' : 'pulse',
+    }),
+  ];
 }
 
 function sessionSnapshotKey(session) {
@@ -2353,7 +2493,6 @@ function commitWorktree(worktreePath, message) {
 }
 
 function buildSessionDetailItems(session) {
-  const provider = resolveSessionProvider(session);
   const snapshot = sessionSnapshotDisplayName(session);
   const projectRelativePath = resolveSessionProjectRelativePath(session);
   const badgeSummary = uniqueStringList([
@@ -2362,12 +2501,7 @@ function buildSessionDetailItems(session) {
   ].filter(Boolean)).join(', ');
   const sessionHealthSummary = buildSessionHealthSummary(session);
   const items = [
-    new DetailItem('Recent change', session.recentChangeSummary || 'No recent change summary.', {
-      iconId: 'history',
-    }),
-    new DetailItem('Top files', session.topChangedFilesLabel || 'No tracked file edits.', {
-      iconId: 'list-flat',
-    }),
+    ...buildSessionFileGroupItems(session),
   ];
   if (badgeSummary) {
     items.push(new DetailItem('Signals', badgeSummary, {
@@ -2378,11 +2512,6 @@ function buildSessionDetailItems(session) {
     items.push(new DetailItem('Session health', sessionHealthSummary, {
       iconId: 'pulse',
       tooltip: buildSessionHealthTooltip(session) || sessionHealthSummary,
-    }));
-  }
-  if (provider?.label) {
-    items.push(new DetailItem('Provider', provider.label, {
-      iconId: 'sparkle',
     }));
   }
   if (snapshot) {
