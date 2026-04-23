@@ -56,6 +56,7 @@ const MANAGED_REPO_SCAN_IGNORED_FOLDERS = [
 const SESSION_ACTIVITY_GROUPS = [
   { kind: 'blocked', label: 'BLOCKED' },
   { kind: 'working', label: 'WORKING NOW' },
+  { kind: 'finished', label: 'FINISHED' },
   { kind: 'idle', label: 'THINKING' },
   { kind: 'stalled', label: 'STALLED' },
   { kind: 'dead', label: 'DEAD' },
@@ -63,6 +64,7 @@ const SESSION_ACTIVITY_GROUPS = [
 const SESSION_ACTIVITY_ICON_IDS = {
   blocked: 'warning',
   working: 'loading~spin',
+  finished: 'pass-filled',
   idle: 'comment-discussion',
   stalled: 'clock',
   dead: 'error',
@@ -120,6 +122,10 @@ function iconColorId(iconId) {
       return 'terminal.ansiBlue';
     case 'organization':
       return 'terminal.ansiGreen';
+    case 'pass-filled':
+    case 'pass':
+    case 'check':
+      return 'testing.iconPassed';
     default:
       return '';
   }
@@ -480,9 +486,15 @@ function agentBadgeFromBranch(branch) {
 
 function buildActiveAgentsStatusSummary(summary) {
   const workingCount = summary?.workingCount || 0;
+  const finishedCount = summary?.finishedCount || 0;
   const idleCount = summary?.idleCount || 0;
-  if (workingCount > 0 || idleCount > 0) {
-    return `$(git-branch) ${workingCount} working · ${idleCount} idle`;
+  if (workingCount > 0 || finishedCount > 0 || idleCount > 0) {
+    const parts = [`${workingCount} working`];
+    if (finishedCount > 0) {
+      parts.push(`${finishedCount} finished`);
+    }
+    parts.push(`${idleCount} idle`);
+    return `$(git-branch) ${parts.join(' · ')}`;
   }
   return `$(git-branch) ${formatCountLabel(summary?.sessionCount || 0, 'tracked session')}`;
 }
@@ -502,6 +514,7 @@ function buildActiveAgentsStatusTooltip(selectedSession, summary) {
   return [
     formatCountLabel(activeCount, 'active agent'),
     formatCountLabel(summary?.workingCount || 0, 'working now session', 'working now sessions'),
+    formatCountLabel(summary?.finishedCount || 0, 'finished session'),
     formatCountLabel(summary?.idleCount || 0, 'idle session'),
     formatCountLabel(summary?.unassignedChangeCount || 0, 'unassigned change'),
     formatCountLabel(summary?.lockedFileCount || 0, 'locked file'),
@@ -546,6 +559,10 @@ function countWorkingSessions(sessions) {
   )).length;
 }
 
+function countFinishedSessions(sessions) {
+  return sessions.filter((session) => session.activityKind === 'finished').length;
+}
+
 function countIdleSessions(sessions) {
   return sessions.filter((session) => (
     session.activityKind === 'idle' || session.activityKind === 'stalled'
@@ -583,6 +600,9 @@ function sessionFreshnessLabel(session, now = Date.now()) {
   if (session.activityKind === 'blocked') {
     return 'Needs attention';
   }
+  if (session.activityKind === 'finished') {
+    return 'Finished';
+  }
   if (session.activityKind === 'stalled') {
     return 'Possibly stale';
   }
@@ -610,6 +630,8 @@ function sessionStatusLabel(session) {
       return 'Blocked';
     case 'working':
       return 'Working';
+    case 'finished':
+      return 'Finished';
     case 'idle':
       return 'Idle';
     case 'stalled':
@@ -816,6 +838,7 @@ function buildWorktreeBranchDescription(sessions) {
 function buildOverviewDescription(summary) {
   return [
     formatCountLabel(summary?.workingCount || 0, 'working agent'),
+    formatCountLabel(summary?.finishedCount || 0, 'finished agent'),
     formatCountLabel(summary?.idleCount || 0, 'idle agent'),
     formatCountLabel(summary?.unassignedChangeCount || 0, 'unassigned change'),
     formatCountLabel(summary?.lockedFileCount || 0, 'locked file'),
@@ -934,6 +957,9 @@ function workingSessionSortKey(session) {
   }
   if (session.deltaLabel === 'New') {
     return 3;
+  }
+  if (session.activityKind === 'finished') {
+    return 5;
   }
   return 4;
 }
@@ -2502,6 +2528,7 @@ function buildRepoOverview(sessions, unassignedChanges, lockEntries) {
   return {
     sessionCount: sessions.length,
     workingCount: countWorkingSessions(sessions),
+    finishedCount: countFinishedSessions(sessions),
     idleCount: countIdleSessions(sessions),
     unassignedChangeCount: (unassignedChanges || []).length,
     lockedFileCount: Array.isArray(lockEntries) ? lockEntries.length : 0,
@@ -2872,6 +2899,7 @@ class ActiveAgentsProvider {
     this.viewSummary = {
       sessionCount: 0,
       workingCount: 0,
+      finishedCount: 0,
       idleCount: 0,
       unassignedChangeCount: 0,
       lockedFileCount: 0,
@@ -2890,6 +2918,7 @@ class ActiveAgentsProvider {
     this.updateViewState({
       sessionCount: 0,
       workingCount: 0,
+      finishedCount: 0,
       idleCount: 0,
       unassignedChangeCount: 0,
       lockedFileCount: 0,
@@ -3012,6 +3041,10 @@ class ActiveAgentsProvider {
     const summary = {
       sessionCount: repoEntries.reduce((total, entry) => total + entry.sessions.length, 0),
       workingCount: repoEntries.reduce((total, entry) => total + entry.overview.workingCount, 0),
+      finishedCount: repoEntries.reduce(
+        (total, entry) => total + (entry.overview.finishedCount || 0),
+        0,
+      ),
       idleCount: repoEntries.reduce((total, entry) => total + entry.overview.idleCount, 0),
       unassignedChangeCount: repoEntries.reduce(
         (total, entry) => total + entry.overview.unassignedChangeCount,
