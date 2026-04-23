@@ -17,6 +17,7 @@ const LOCK_FILE_RELATIVE = path.join('.omx', 'state', 'agent-file-locks.json');
 const ACTIVE_SESSION_FILES_GLOB = '**/.omx/state/active-sessions/*.json';
 const AGENT_FILE_LOCKS_GLOB = '**/.omx/state/agent-file-locks.json';
 const WORKTREE_AGENT_LOCKS_GLOB = '**/{.omx,.omc}/agent-worktrees/**/AGENT.lock';
+const MANAGED_WORKTREE_GIT_FILES_GLOB = '**/{.omx,.omc}/agent-worktrees/*/.git';
 const MANAGED_WORKTREE_RELATIVE_ROOTS = [
   path.join('.omx', 'agent-worktrees'),
   path.join('.omc', 'agent-worktrees'),
@@ -24,6 +25,7 @@ const MANAGED_WORKTREE_RELATIVE_ROOTS = [
 const AGENT_LOG_FILES_GLOB = '**/.omx/logs/*.log';
 const SESSION_SCAN_EXCLUDE_GLOB = '**/{node_modules,.git,.omx/agent-worktrees,.omc/agent-worktrees}/**';
 const WORKTREE_LOCK_SCAN_EXCLUDE_GLOB = '**/{node_modules,.git}/**';
+const MANAGED_WORKTREE_GIT_SCAN_EXCLUDE_GLOB = '**/node_modules/**';
 const SESSION_SCAN_LIMIT = 200;
 const REFRESH_DEBOUNCE_MS = 250;
 const RECENTLY_ACTIVE_WINDOW_MS = 10 * 60 * 1000;
@@ -735,6 +737,30 @@ function buildRepoTooltip(repoRoot, summary) {
   ].join('\n');
 }
 
+function repoRootDisplayLabel(repoRoot) {
+  const normalizedRepoRoot = path.resolve(repoRoot);
+  const matchingWorkspaceRoots = (vscode.workspace.workspaceFolders || [])
+    .map((folder) => (typeof folder?.uri?.fsPath === 'string' ? path.resolve(folder.uri.fsPath) : ''))
+    .filter((workspaceRoot) => workspaceRoot && isPathWithin(workspaceRoot, normalizedRepoRoot))
+    .sort((left, right) => right.length - left.length);
+
+  const workspaceRoot = matchingWorkspaceRoots[0];
+  if (!workspaceRoot) {
+    return path.basename(normalizedRepoRoot);
+  }
+
+  const workspaceLabel = path.basename(workspaceRoot);
+  const relativePath = normalizeRelativePath(path.relative(workspaceRoot, normalizedRepoRoot));
+  if (!relativePath) {
+    return workspaceLabel;
+  }
+
+  return [
+    workspaceLabel,
+    ...relativePath.split('/').filter(Boolean),
+  ].join(' -> ');
+}
+
 function sessionSnapshotKey(session) {
   return `${session?.repoRoot || ''}::${session?.branch || ''}`;
 }
@@ -1094,7 +1120,10 @@ class DetailItem extends vscode.TreeItem {
 
 class RepoItem extends vscode.TreeItem {
   constructor(repoRoot, sessions, changes, options = {}) {
-    super(path.basename(repoRoot), vscode.TreeItemCollapsibleState.Expanded);
+    const label = typeof options.label === 'string' && options.label.trim()
+      ? options.label.trim()
+      : repoRootDisplayLabel(repoRoot);
+    super(label, vscode.TreeItemCollapsibleState.Expanded);
     this.repoRoot = repoRoot;
     this.sessions = sessions;
     this.changes = changes;
@@ -1684,6 +1713,10 @@ function repoRootFromWorktreeLockFile(filePath) {
   return path.resolve(path.dirname(filePath), '..', '..', '..');
 }
 
+function repoRootFromManagedWorktreeGitFile(filePath) {
+  return path.resolve(path.dirname(filePath), '..', '..', '..');
+}
+
 function repoRootFromLockFile(filePath) {
   return path.resolve(path.dirname(filePath), '..', '..');
 }
@@ -1947,7 +1980,7 @@ function localizeChangeForSession(session, change) {
 }
 
 async function findRepoSessionEntries() {
-  const [sessionFiles, worktreeLockFiles] = await Promise.all([
+  const [sessionFiles, worktreeLockFiles, managedWorktreeGitFiles] = await Promise.all([
     vscode.workspace.findFiles(
       ACTIVE_SESSION_FILES_GLOB,
       SESSION_SCAN_EXCLUDE_GLOB,
@@ -1958,22 +1991,49 @@ async function findRepoSessionEntries() {
       WORKTREE_LOCK_SCAN_EXCLUDE_GLOB,
       SESSION_SCAN_LIMIT,
     ),
+    vscode.workspace.findFiles(
+      MANAGED_WORKTREE_GIT_FILES_GLOB,
+      MANAGED_WORKTREE_GIT_SCAN_EXCLUDE_GLOB,
+      SESSION_SCAN_LIMIT,
+    ),
   ]);
 
   const repoRoots = new Set();
+  const addRepoRootCandidate = (repoRoot) => {
+    if (typeof repoRoot !== 'string' || !repoRoot.trim()) {
+      return;
+    }
+
+    const normalizedRepoRoot = path.resolve(repoRoot);
+    const isInsideWorkspaceManagedWorktree = (vscode.workspace.workspaceFolders || [])
+      .map((folder) => (typeof folder?.uri?.fsPath === 'string' ? path.resolve(folder.uri.fsPath) : ''))
+      .filter(Boolean)
+      .some((workspaceRoot) => MANAGED_WORKTREE_RELATIVE_ROOTS.some((relativeRoot) => (
+        isPathWithin(path.join(workspaceRoot, relativeRoot), normalizedRepoRoot)
+      )));
+    if (!isInsideWorkspaceManagedWorktree) {
+      repoRoots.add(normalizedRepoRoot);
+    }
+  };
+
   for (const uri of sessionFiles) {
-    repoRoots.add(repoRootFromSessionFile(uri.fsPath));
+    addRepoRootCandidate(repoRootFromSessionFile(uri.fsPath));
   }
   for (const uri of worktreeLockFiles) {
     if (path.basename(uri.fsPath) !== 'AGENT.lock') {
       continue;
     }
-    repoRoots.add(repoRootFromWorktreeLockFile(uri.fsPath));
+    addRepoRootCandidate(repoRootFromWorktreeLockFile(uri.fsPath));
   }
-
-  if (repoRoots.size === 0) {
-    for (const workspaceFolder of vscode.workspace.workspaceFolders || []) {
-      repoRoots.add(workspaceFolder.uri.fsPath);
+  for (const uri of managedWorktreeGitFiles) {
+    if (path.basename(uri.fsPath) !== '.git') {
+      continue;
+    }
+    addRepoRootCandidate(repoRootFromManagedWorktreeGitFile(uri.fsPath));
+  }
+  for (const workspaceFolder of vscode.workspace.workspaceFolders || []) {
+    if (workspaceFolder?.uri?.fsPath) {
+      addRepoRootCandidate(workspaceFolder.uri.fsPath);
     }
   }
 
@@ -2951,6 +3011,7 @@ function activate(context) {
   const activeSessionsWatcher = vscode.workspace.createFileSystemWatcher(ACTIVE_SESSION_FILES_GLOB);
   const lockWatcher = vscode.workspace.createFileSystemWatcher(AGENT_FILE_LOCKS_GLOB);
   const worktreeLockWatcher = vscode.workspace.createFileSystemWatcher(WORKTREE_AGENT_LOCKS_GLOB);
+  const managedWorktreeGitWatcher = vscode.workspace.createFileSystemWatcher(MANAGED_WORKTREE_GIT_FILES_GLOB);
   const logWatcher = vscode.workspace.createFileSystemWatcher(AGENT_LOG_FILES_GLOB);
   const updateCommitInput = (session) => {
     sourceControl.inputBox.enabled = true;
@@ -3076,6 +3137,7 @@ function activate(context) {
     activeSessionsWatcher,
     lockWatcher,
     worktreeLockWatcher,
+    managedWorktreeGitWatcher,
     logWatcher,
     { dispose: () => clearInterval(interval) },
   );
@@ -3084,6 +3146,7 @@ function activate(context) {
     ...bindRefreshWatcher(activeSessionsWatcher, scheduleRefresh),
     ...bindRefreshWatcher(lockWatcher, refreshLockRegistry),
     ...bindRefreshWatcher(worktreeLockWatcher, scheduleRefresh),
+    ...bindRefreshWatcher(managedWorktreeGitWatcher, scheduleRefresh),
     ...bindRefreshWatcher(logWatcher, scheduleRefresh),
   );
   void ensureManagedRepoScanIgnores();

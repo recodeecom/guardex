@@ -1387,13 +1387,14 @@ test('active-agents extension registers tree and decoration providers', async ()
   assert.equal(registrations.providers.length, 1);
   assert.equal(registrations.providers[0].viewId, 'gitguardex.activeAgents');
   assert.equal(registrations.decorationProviders.length, 1);
-  assert.equal(registrations.fileWatchers.length, 4);
+  assert.equal(registrations.fileWatchers.length, 5);
   assert.deepEqual(
     registrations.fileWatchers.map((watcher) => watcher.pattern),
     [
       '**/.omx/state/active-sessions/*.json',
       '**/.omx/state/agent-file-locks.json',
       '**/{.omx,.omc}/agent-worktrees/**/AGENT.lock',
+      '**/{.omx,.omc}/agent-worktrees/*/.git',
       '**/.omx/logs/*.log',
     ],
   );
@@ -1663,6 +1664,69 @@ test('active-agents extension groups live sessions under a repo node', async () 
     )),
     true,
   );
+
+  for (const subscription of context.subscriptions) {
+    subscription.dispose?.();
+  }
+});
+
+test('active-agents extension discovers nested managed-worktree subprojects under workspace roots', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-subprojects-'));
+  const nestedRepoRoot = path.join(tempRoot, 'gitguardex');
+  initGitRepo(nestedRepoRoot);
+  fs.writeFileSync(path.join(nestedRepoRoot, 'tracked.txt'), 'base\n', 'utf8');
+  runGit(nestedRepoRoot, ['add', 'tracked.txt']);
+  runGit(nestedRepoRoot, ['commit', '-m', 'baseline']);
+
+  const worktreePath = path.join(
+    nestedRepoRoot,
+    '.omx',
+    'agent-worktrees',
+    'agent__codex__nested-visible-task',
+  );
+  fs.mkdirSync(path.dirname(worktreePath), { recursive: true });
+  runGit(nestedRepoRoot, [
+    'worktree',
+    'add',
+    '-b',
+    'agent/codex/nested-visible-task',
+    worktreePath,
+  ]);
+  fs.writeFileSync(path.join(worktreePath, 'tracked.txt'), 'base\nchanged\n', 'utf8');
+
+  const managedWorktreeGitFile = path.join(worktreePath, '.git');
+  assert.equal(fs.statSync(managedWorktreeGitFile).isFile(), true);
+
+  const { registrations, vscode } = createMockVscode(tempRoot);
+  vscode.workspace.findFiles = async (pattern) => {
+    if (pattern === '**/{.omx,.omc}/agent-worktrees/*/.git') {
+      return [{ fsPath: managedWorktreeGitFile }];
+    }
+    return [];
+  };
+  const extension = loadExtensionWithMockVscode(vscode);
+  const context = { subscriptions: [] };
+
+  extension.activate(context);
+  await flushAsyncWork();
+
+  const provider = registrations.providers[0].provider;
+  const [repoItem] = await provider.getChildren();
+  assert.equal(repoItem.label, `${path.basename(tempRoot)} -> gitguardex`);
+  assert.equal(repoItem.repoRoot, nestedRepoRoot);
+  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+
+  const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
+  const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
+  assert.equal(worktreeItem, null);
+  assert.equal(sessionItem.session.repoRoot, nestedRepoRoot);
+  assert.equal(sessionItem.session.worktreePath, worktreePath);
+  assert.equal(sessionItem.session.branch, 'agent/codex/nested-visible-task');
+  assert.match(sessionItem.description, /^Working: codex · via OpenAI · 1 changed file/);
+  assert.deepEqual(registrations.treeViews[0].badge, {
+    value: 1,
+    tooltip: repoItem.description,
+  });
 
   for (const subscription of context.subscriptions) {
     subscription.dispose?.();
@@ -2686,6 +2750,7 @@ test('active-agents extension watches active sessions, lock files, logs, and ses
       '**/.omx/state/active-sessions/*.json',
       '**/.omx/state/agent-file-locks.json',
       '**/{.omx,.omc}/agent-worktrees/**/AGENT.lock',
+      '**/{.omx,.omc}/agent-worktrees/*/.git',
       '**/.omx/logs/*.log',
       path.join(worktreePath, '.git', 'index'),
     ],
@@ -2697,7 +2762,7 @@ test('active-agents extension watches active sessions, lock files, logs, and ses
   await new Promise((resolve) => setTimeout(resolve, 350));
   await flushAsyncWork();
 
-  assert.equal(registrations.fileWatchers[4].disposed, true);
+  assert.equal(registrations.fileWatchers[5].disposed, true);
 
   for (const subscription of context.subscriptions) {
     subscription.dispose?.();
@@ -2719,7 +2784,8 @@ test('active-agents extension debounces refresh events with a trailing 250ms tim
   registrations.fileWatchers[0].fireChange({ fsPath: path.join(tempRoot, '.omx', 'state', 'active-sessions', 'a.json') });
   registrations.fileWatchers[1].fireChange({ fsPath: path.join(tempRoot, '.omx', 'state', 'agent-file-locks.json') });
   registrations.fileWatchers[2].fireChange({ fsPath: path.join(tempRoot, '.omx', 'agent-worktrees', 'agent__codex__a', 'AGENT.lock') });
-  registrations.fileWatchers[3].fireChange({ fsPath: path.join(tempRoot, '.omx', 'logs', 'agent-agent__codex__a.log') });
+  registrations.fileWatchers[3].fireChange({ fsPath: path.join(tempRoot, '.omx', 'agent-worktrees', 'agent__codex__a', '.git') });
+  registrations.fileWatchers[4].fireChange({ fsPath: path.join(tempRoot, '.omx', 'logs', 'agent-agent__codex__a.log') });
   assert.equal(provider.onDidChangeTreeDataEmitter.fireCount, 0);
 
   await new Promise((resolve) => setTimeout(resolve, 300));
