@@ -34,6 +34,8 @@ const ACTIVE_AGENTS_MANIFEST_RELATIVE = path.join('vscode', 'guardex-active-agen
 const ACTIVE_AGENTS_INSTALL_SCRIPT_RELATIVE = path.join('scripts', 'install-vscode-active-agents-extension.js');
 const RELOAD_WINDOW_ACTION = 'Reload Window';
 const UPDATE_LATER_ACTION = 'Later';
+const ACTIVE_AGENTS_EXTENSION_ID = 'recodeee.gitguardex-active-agents';
+const RESTART_EXTENSION_HOST_COMMAND = 'workbench.action.restartExtensionHost';
 const REFRESH_POLL_INTERVAL_MS = 30_000;
 const INSPECT_PANEL_VIEW_TYPE = 'gitguardex.activeAgents.inspect';
 const GIT_CONFIGURATION_SECTION = 'git';
@@ -830,7 +832,7 @@ function repoRootDisplayLabel(repoRoot) {
   return [
     workspaceLabel,
     ...relativePath.split('/').filter(Boolean),
-  ].join(' -> ');
+  ].join('/');
 }
 
 function sessionSnapshotKey(session) {
@@ -1501,6 +1503,28 @@ function worktreeProjectRelativePath(sessions) {
   return projectPaths.length === 1 ? projectPaths[0] : '';
 }
 
+function repoEntryDisplayLabel(repoRoot, sessions) {
+  const repoLabel = repoRootDisplayLabel(repoRoot);
+  const projectPaths = uniqueStringList((sessions || [])
+    .map((session) => resolveSessionProjectRelativePath(session))
+    .filter(Boolean));
+  if (projectPaths.length !== 1) {
+    return repoLabel;
+  }
+
+  const [projectRelativePath] = projectPaths;
+  const hasRootScopedSession = (sessions || []).some(
+    (session) => !resolveSessionProjectRelativePath(session),
+  );
+  if (!projectRelativePath || hasRootScopedSession) {
+    return repoLabel;
+  }
+  if (repoLabel.endsWith(`/${projectRelativePath}`)) {
+    return repoLabel;
+  }
+  return `${repoLabel}/${projectRelativePath}`;
+}
+
 function buildProjectScopedDescription(entries) {
   const sessions = (entries || []).flatMap((entry) => Array.isArray(entry?.sessions) ? entry.sessions : []);
   if (sessions.length === 0) {
@@ -1661,6 +1685,13 @@ function finishSession(session) {
 
 function syncSession(session) {
   runSessionTerminalCommand(session, 'Sync', 'sync', 'gx sync');
+}
+
+async function restartActiveAgents(extensionId) {
+  if (extensionId && extensionId !== ACTIVE_AGENTS_EXTENSION_ID) {
+    return;
+  }
+  await vscode.commands.executeCommand(RESTART_EXTENSION_HOST_COMMAND);
 }
 
 function execFileAsync(command, args, options = {}) {
@@ -2966,6 +2997,7 @@ class ActiveAgentsProvider {
     }
 
     return repoEntries.map((entry) => new RepoItem(entry.repoRoot, entry.sessions, entry.changes, {
+      label: repoEntryDisplayLabel(entry.repoRoot, entry.sessions),
       overview: entry.overview,
       unassignedChanges: entry.unassignedChanges,
       lockEntries: entry.lockEntries,
@@ -3258,6 +3290,7 @@ function activate(context) {
     vscode.window.registerFileDecorationProvider(decorationProvider),
     vscode.commands.registerCommand('gitguardex.activeAgents.startAgent', () => startAgentFromPrompt(refresh)),
     vscode.commands.registerCommand('gitguardex.activeAgents.refresh', refresh),
+    vscode.commands.registerCommand('gitguardex.activeAgents.restart', restartActiveAgents),
     vscode.commands.registerCommand('gitguardex.activeAgents.focus', async () => {
       await vscode.commands.executeCommand('workbench.view.extension.gitguardex.activeAgentsContainer');
     }),
