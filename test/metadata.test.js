@@ -32,6 +32,7 @@ test('release workflow publishes with provenance in CI', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert.match(workflow, /name:\s+Checkout\s+uses:\s+actions\/checkout@[0-9a-f]{40}[^\n]*\n\s+with:\s*\n\s+fetch-depth:\s+0/s);
   assert.match(workflow, /npm publish --provenance --access public/);
+  assert.match(workflow, /name:\s+Install Cosign\s+uses:\s+sigstore\/cosign-installer@[0-9a-f]{40}[^\n]*# v4\.1\.1/s);
 });
 
 test('release workflow skips publish when the current version is already on npm', () => {
@@ -43,6 +44,19 @@ test('release workflow skips publish when the current version is already on npm'
   assert.match(workflow, /if:\s+\$\{\{\s*steps\.registry\.outputs\.already_published != 'true'\s*\}\}/);
   assert.match(workflow, /if:\s+\$\{\{\s*steps\.registry\.outputs\.already_published == 'true'\s*\}\}/);
   assert.match(workflow, /skipping publish\./);
+});
+
+test('release workflow uploads signed GitHub release assets for the package tarball', () => {
+  const workflowPath = path.join(repoRoot, '.github', 'workflows', 'release.yml');
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  assert.match(workflow, /name:\s+Pack release tarball/);
+  assert.match(workflow, /npm pack --pack-destination dist/);
+  assert.match(workflow, /sha256sum "\$\{\{\s*steps\.pack\.outputs\.package_path\s*\}\}" > "\$\{\{\s*steps\.pack\.outputs\.package_path\s*\}\}\.sha256"/);
+  assert.match(workflow, /cosign sign-blob "\$\{\{\s*steps\.pack\.outputs\.package_path\s*\}\}"/);
+  assert.match(workflow, /--bundle "\$\{\{\s*steps\.pack\.outputs\.package_path\s*\}\}\.sigstore\.json"/);
+  assert.match(workflow, /name:\s+Upload signed release assets/);
+  assert.match(workflow, /GH_TOKEN:\s+\$\{\{\s*github\.token\s*\}\}/);
+  assert.match(workflow, /gh release upload "\$RELEASE_TAG"/);
 });
 
 test('release workflow only publishes from published releases or manual dispatch', () => {
@@ -129,12 +143,48 @@ test('security workflows are present and use pinned GitHub Actions SHAs', () => 
   }
 });
 
+test('CI and CodeQL workflows run on pull requests targeting main', () => {
+  const ciWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
+  const codeqlWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'codeql.yml'), 'utf8');
+  assert.match(ciWorkflow, /pull_request:\s*\n\s*branches:\s*\n\s*-\s*main/s);
+  assert.match(codeqlWorkflow, /pull_request:\s*\n\s*branches:\s*\n\s*-\s*main/s);
+});
+
 test('code review workflow does not gate startup on secrets context', () => {
   const workflowPath = path.join(repoRoot, '.github', 'workflows', 'cr.yml');
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert.doesNotMatch(workflow, /if:\s+\$\{\{\s*secrets\.OPENAI_API_KEY/);
   assert.match(workflow, /OPENAI_API_KEY:\s+\$\{\{\s*secrets\.OPENAI_API_KEY\s*\}\}/);
   assert.match(workflow, /if:\s+\$\{\{\s*env\.OPENAI_API_KEY != ''\s*\}\}/);
+});
+
+test('security metadata points at the live repo and dependabot covers npm plus actions', () => {
+  const securityPolicy = fs.readFileSync(path.join(repoRoot, 'SECURITY.md'), 'utf8');
+  const dependabot = fs.readFileSync(path.join(repoRoot, '.github', 'dependabot.yml'), 'utf8');
+  const codeowners = fs.readFileSync(path.join(repoRoot, '.github', 'CODEOWNERS'), 'utf8');
+
+  assert.match(securityPolicy, /https:\/\/github\.com\/recodeee\/gitguardex\/security\/advisories\/new/);
+  assert.match(dependabot, /package-ecosystem:\s+npm/);
+  assert.match(dependabot, /package-ecosystem:\s+github-actions/);
+  assert.match(dependabot, /versioning-strategy:\s+lockfile-only/);
+  assert.match(codeowners, /^# Default code owners/m);
+  assert.match(codeowners, /^\*\s+@recodeecom\s+@NagyVikt$/m);
+});
+
+test('package manifest pins runtime and dev dependency versions exactly', () => {
+  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  const lockfile = fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8');
+
+  for (const sectionName of ['dependencies', 'devDependencies']) {
+    const section = pkg[sectionName] || {};
+    for (const [name, version] of Object.entries(section)) {
+      assert.doesNotMatch(version, /^[~^]/, `${sectionName}.${name} must stay pinned exactly`);
+    }
+  }
+
+  assert.match(lockfile, /"jsonc-parser": "3\.3\.1"/);
+  assert.match(lockfile, /"semver": "7\.7\.4"/);
+  assert.match(lockfile, /"fast-check": "3\.23\.2"/);
 });
 
 test('frontend mirror workflow skips cleanly when the mirror PAT is missing', () => {

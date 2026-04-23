@@ -1,5 +1,10 @@
 version: 2
 updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    versioning-strategy: lockfile-only
   - package-ecosystem: github-actions
     directory: /
     schedule:

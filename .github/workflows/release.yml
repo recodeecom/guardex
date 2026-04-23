@@ -1,4 +1,4 @@
-name: Release to npm (provenance)
+name: Release to npm (provenance + signed assets)
 
 on:
   workflow_dispatch:
@@ -14,6 +14,9 @@ jobs:
     if: github.repository == 'recodeee/gitguardex'
     runs-on: ubuntu-latest
     environment: npm
+    permissions:
+      contents: write
+      id-token: write
 
     steps:
       - name: Checkout
@@ -27,6 +30,9 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org
           cache: npm
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
 
       - name: Install
         run: npm ci --ignore-scripts
@@ -55,6 +61,14 @@ jobs:
             echo "already_published=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Pack release tarball
+        id: pack
+        run: |
+          mkdir -p dist
+          package_file="$(npm pack --pack-destination dist | tail -n 1)"
+          echo "package_file=${package_file}" >> "$GITHUB_OUTPUT"
+          echo "package_path=dist/${package_file}" >> "$GITHUB_OUTPUT"
+
       - name: Publish with provenance
         if: ${{ steps.registry.outputs.already_published != 'true' }}
         run: npm publish --provenance --access public
@@ -65,3 +79,24 @@ jobs:
           PACKAGE_NAME: ${{ steps.pkg.outputs.name }}
           PACKAGE_VERSION: ${{ steps.pkg.outputs.version }}
         run: echo "${PACKAGE_NAME}@${PACKAGE_VERSION} is already on npm; skipping publish."
+
+      - name: Generate release checksum
+        run: |
+          sha256sum "${{ steps.pack.outputs.package_path }}" > "${{ steps.pack.outputs.package_path }}.sha256"
+
+      - name: Sign release tarball with Sigstore
+        run: |
+          cosign sign-blob "${{ steps.pack.outputs.package_path }}" \
+            --bundle "${{ steps.pack.outputs.package_path }}.sigstore.json" \
+            --yes
+
+      - name: Upload signed release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || format('v{0}', steps.pkg.outputs.version) }}
+        run: |
+          gh release upload "$RELEASE_TAG" \
+            "${{ steps.pack.outputs.package_path }}" \
+            "${{ steps.pack.outputs.package_path }}.sha256" \
+            "${{ steps.pack.outputs.package_path }}.sigstore.json" \
+            --clobber
