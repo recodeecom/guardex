@@ -1,18 +1,23 @@
 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
   <path
-    d="M12 4.25L7.5 6.85V11.95L12 14.55L16.5 11.95V6.85L12 4.25ZM12 14.55V19.75M7.5 11.95L3.75 14.1M16.5 11.95L20.25 14.1"
+    d="M12 4.25C9.12 4.25 6.95 6.39 6.95 9.18C6.95 10.97 7.56 12.43 8.52 13.62C8.39 14.54 8.02 15.41 7.42 16.16L6.03 17.89C5.61 18.41 5.99 19.18 6.66 19.18H17.34C18.01 19.18 18.39 18.41 17.97 17.89L16.58 16.16C15.98 15.41 15.61 14.54 15.48 13.62C16.44 12.43 17.05 10.97 17.05 9.18C17.05 6.39 14.88 4.25 12 4.25Z"
     stroke="currentColor"
-    stroke-width="1.75"
+    stroke-width="1.6"
     stroke-linecap="round"
     stroke-linejoin="round"
   />
-  <circle cx="12" cy="4.25" r="1.75" fill="currentColor"/>
-  <circle cx="7.5" cy="6.85" r="1.75" fill="currentColor"/>
-  <circle cx="16.5" cy="6.85" r="1.75" fill="currentColor"/>
-  <circle cx="7.5" cy="11.95" r="1.75" fill="currentColor"/>
-  <circle cx="16.5" cy="11.95" r="1.75" fill="currentColor"/>
-  <circle cx="12" cy="14.55" r="1.75" fill="currentColor"/>
-  <circle cx="3.75" cy="14.1" r="1.75" fill="currentColor"/>
-  <circle cx="20.25" cy="14.1" r="1.75" fill="currentColor"/>
-  <circle cx="12" cy="19.75" r="1.75" fill="currentColor"/>
+  <path
+    d="M8.55 7.6C9.6 6.46 10.78 5.89 12.1 5.89C13.49 5.89 14.72 6.5 15.8 7.72"
+    stroke="currentColor"
+    stroke-width="1.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M9.05 9.9L10.2 9.5M14.95 9.9L13.8 9.5M11.15 11.78L12 12.26L12.85 11.78M9.72 14.08C10.36 14.62 11.12 14.89 12 14.89C12.88 14.89 13.64 14.62 14.28 14.08M9.72 19.18L10.85 17.05H13.15L14.28 19.18"
+    stroke="currentColor"
+    stroke-width="1.6"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
 </svg>
