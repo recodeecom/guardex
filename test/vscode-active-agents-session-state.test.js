@@ -270,6 +270,7 @@ function createMockVscode(tempRoot) {
     infoMessages: [],
     infoResponses: [],
     inputResponses: [],
+    inputBoxCalls: [],
     quickPickCalls: [],
     quickPickResponse: undefined,
     informationMessages: [],
@@ -492,7 +493,10 @@ function createMockVscode(tempRoot) {
           registrations.warningMessages.push(args);
           return undefined;
         },
-        showInputBox: async () => registrations.inputResponses.shift(),
+        showInputBox: async (options) => {
+          registrations.inputBoxCalls.push(options);
+          return registrations.inputResponses.shift();
+        },
         showQuickPick: async (items, options) => {
           registrations.quickPickCalls.push({ items, options });
           return registrations.quickPickResponse;
@@ -1454,17 +1458,12 @@ test('active-agents extension registers tree and decoration providers', async ()
   await flushAsyncWork();
 
   assert.equal(registrations.treeViews.length, 1);
-  assert.equal(registrations.sourceControls.length, 1);
+  assert.equal(registrations.sourceControls.length, 0);
   assert.equal(registrations.statusBarItems.length, 1);
   assert.equal(registrations.treeViews[0].viewId, 'gitguardex.activeAgents');
-  assert.equal(registrations.sourceControls[0].label, 'Active Agents Commit');
   assert.equal(registrations.statusBarItems[0].name, 'GitGuardex Active Agents');
   assert.equal(registrations.statusBarItems[0].command, 'gitguardex.activeAgents.focus');
   assert.equal(registrations.statusBarItems[0].visible, false);
-  assert.equal(
-    registrations.sourceControls[0].inputBox.placeholder,
-    'Pick an Active Agents session to commit its worktree.',
-  );
   assert.equal(registrations.providers.length, 1);
   assert.equal(registrations.providers[0].viewId, 'gitguardex.activeAgents');
   assert.equal(registrations.decorationProviders.length, 1);
@@ -1729,7 +1728,7 @@ test('active-agents extension groups live sessions under a repo node', async () 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
   assert.equal(repoItem.label, path.basename(tempRoot));
-  assert.equal(repoItem.description, '0 working agents · 1 idle agent · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '0 working agents · 0 finished agents · 1 idle agent · 0 unassigned changes · 0 locked files · 0 conflicts');
 
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
@@ -1818,7 +1817,7 @@ test('active-agents extension discovers nested managed-worktree subprojects unde
   const [repoItem] = await provider.getChildren();
   assert.equal(repoItem.label, `${path.basename(tempRoot)}/gitguardex`);
   assert.equal(repoItem.repoRoot, nestedRepoRoot);
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working agent · 0 finished agents · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
 
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
@@ -2113,7 +2112,7 @@ test('active-agents extension shows grouped repo changes beside active agents', 
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 1 unassigned change · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working agent · 0 finished agents · 0 idle agents · 1 unassigned change · 0 locked files · 0 conflicts');
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
     'Working now',
@@ -2126,9 +2125,9 @@ test('active-agents extension shows grouped repo changes beside active agents', 
   const advancedSection = await getSectionByLabel(provider, repoItem, 'Advanced details');
   const overviewSection = await getSectionByLabel(provider, repoItem, 'Overview');
 
-  assert.equal(overviewSection.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+  assert.equal(overviewSection.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
   assert.equal(workingSection.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
-  assert.equal(advancedSection.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+  assert.equal(advancedSection.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
 
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
   assert.equal(worktreeItem, null);
@@ -2249,7 +2248,7 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
   assert.equal(repoItem.label, `${path.basename(tempRoot)}/gitguardex`);
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working agent · 0 finished agents · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
 
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
@@ -2271,9 +2270,9 @@ test('active-agents extension surfaces live managed worktrees from AGENT.lock fa
   assert.match(sessionItem.tooltip, /Snapshot nagyviktor@edixa\.com/);
 
   const advancedSection = await getSectionByLabel(provider, repoItem, 'Advanced details');
-  assert.equal(overviewSection.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
+  assert.equal(overviewSection.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
   assert.equal(workingSection.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
-  assert.equal(advancedSection.collapsibleState, vscode.TreeItemCollapsibleState.Expanded);
+  assert.equal(advancedSection.collapsibleState, vscode.TreeItemCollapsibleState.Collapsed);
   const activeAgentTree = await getSectionByLabel(provider, advancedSection, 'Active agent tree');
   const rawWorkingSection = await getSectionByLabel(provider, activeAgentTree, 'WORKING NOW');
   const [rawProjectFolder] = await provider.getChildren(rawWorkingSection);
@@ -2467,7 +2466,7 @@ test('active-agents extension surfaces plain managed worktrees from workspace fa
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working agent · 0 finished agents · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
 
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
@@ -2522,7 +2521,7 @@ test('active-agents extension resolves owning repo sessions when the window is o
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
   assert.equal(repoItem.label, path.basename(tempRoot));
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '1 working agent · 0 finished agents · 0 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
 
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const { worktreeItem, sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
@@ -2601,7 +2600,7 @@ test('active-agents extension decorates sessions and repo changes from the lock 
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '1 working agent · 0 idle agents · 1 unassigned change · 3 locked files · 2 conflicts');
+  assert.equal(repoItem.description, '1 working agent · 0 finished agents · 0 idle agents · 1 unassigned change · 3 locked files · 2 conflicts');
   const workingSection = await getSectionByLabel(provider, repoItem, 'Working now');
   const unassignedSection = await getSectionByLabel(provider, repoItem, 'Unassigned changes');
   const advancedSection = await getSectionByLabel(provider, repoItem, 'Advanced details');
@@ -2852,7 +2851,7 @@ test('active-agents extension groups blocked, working, idle, stalled, and dead s
 
   const provider = registrations.providers[0].provider;
   const [repoItem] = await provider.getChildren();
-  assert.equal(repoItem.description, '2 working agents · 2 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
+  assert.equal(repoItem.description, '2 working agents · 0 finished agents · 2 idle agents · 0 unassigned changes · 0 locked files · 0 conflicts');
 
   assert.deepEqual((await provider.getChildren(repoItem)).map((item) => item.label), [
     'Overview',
@@ -2971,7 +2970,7 @@ test('active-agents extension debounces refresh events with a trailing 250ms tim
   }
 });
 
-test('active-agents extension commits the selected session worktree from the SCM input', async () => {
+test('active-agents extension commits the selected session worktree from the header prompt', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-commit-view-'));
   const worktreePath = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-commit-session-'));
   initGitRepo(worktreePath);
@@ -3016,13 +3015,17 @@ test('active-agents extension commits the selected session worktree from the SCM
   const { sessionItem } = await getOnlyWorktreeAndSession(provider, workingSection);
   registrations.treeViews[0].fireSelection([sessionItem]);
 
-  assert.equal(
-    registrations.sourceControls[0].inputBox.placeholder,
-    `Commit ${sessionItem.session.agentName} · ${sessionItem.session.taskName} on ${sessionItem.session.branch} · 0 locks (Ctrl+Enter)`,
-  );
-  registrations.sourceControls[0].inputBox.value = 'Ship the selected sandbox';
+  registrations.inputResponses.push('Ship the selected sandbox');
+  assert.equal(registrations.sourceControls.length, 0);
+  assert.deepEqual(registrations.inputBoxCalls, []);
 
   await vscode.commands.executeCommand('gitguardex.activeAgents.commitSelectedSession');
+
+  assert.equal(
+    registrations.inputBoxCalls.at(-1).placeHolder,
+    `Commit ${sessionItem.session.agentName} · ${sessionItem.session.taskName} on ${sessionItem.session.branch} · 0 locks`,
+  );
+  assert.equal(registrations.inputBoxCalls.at(-1).prompt, 'Commit codex · commit-task worktree');
 
   const commitMessage = runGit(worktreePath, ['log', '-1', '--pretty=%s']).stdout.trim();
   assert.equal(commitMessage, 'Ship the selected sandbox');
@@ -3031,7 +3034,6 @@ test('active-agents extension commits the selected session worktree from the SCM
     runGit(worktreePath, ['status', '--short', '--', '.omx/state/agent-file-locks.json']).stdout.trim(),
     '?? .omx/state/agent-file-locks.json',
   );
-  assert.equal(registrations.sourceControls[0].inputBox.value, '');
   assert.deepEqual(registrations.informationMessages, []);
   assert.deepEqual(registrations.errorMessages, []);
 
@@ -3047,7 +3049,6 @@ test('active-agents extension asks for a session before committing', async () =>
   const context = { subscriptions: [] };
 
   extension.activate(context);
-  registrations.sourceControls[0].inputBox.value = 'Commit without a selection';
 
   await vscode.commands.executeCommand('gitguardex.activeAgents.commitSelectedSession');
 

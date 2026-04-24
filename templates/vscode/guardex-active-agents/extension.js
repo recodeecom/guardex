@@ -453,7 +453,7 @@ function sessionCommitPlaceholder(session) {
     return 'Pick an Active Agents session to commit its worktree.';
   }
 
-  return `Commit ${sessionIdentityLabel(session)} on ${session.branch} · ${formatCountLabel(session.lockCount || 0, 'lock')} (Ctrl+Enter)`;
+  return `Commit ${sessionIdentityLabel(session)} on ${session.branch} · ${formatCountLabel(session.lockCount || 0, 'lock')}`;
 }
 
 function agentNameFromBranch(branch) {
@@ -3338,10 +3338,6 @@ function activate(context) {
     treeDataProvider: provider,
     showCollapseAll: true,
   });
-  const sourceControl = vscode.scm.createSourceControl(
-    'gitguardex.activeAgents.commitInput',
-    'Active Agents Commit',
-  );
   const activeAgentsStatusItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 10);
   activeAgentsStatusItem.name = 'GitGuardex Active Agents';
   activeAgentsStatusItem.command = 'gitguardex.activeAgents.focus';
@@ -3357,11 +3353,6 @@ function activate(context) {
   const worktreeLockWatcher = vscode.workspace.createFileSystemWatcher(WORKTREE_AGENT_LOCKS_GLOB);
   const managedWorktreeGitWatcher = vscode.workspace.createFileSystemWatcher(MANAGED_WORKTREE_GIT_FILES_GLOB);
   const logWatcher = vscode.workspace.createFileSystemWatcher(AGENT_LOG_FILES_GLOB);
-  const updateCommitInput = (session) => {
-    sourceControl.inputBox.enabled = true;
-    sourceControl.inputBox.visible = true;
-    sourceControl.inputBox.placeholder = sessionCommitPlaceholder(session);
-  };
   const updateStatusBar = () => {
     const selectedSession = provider.getSelectedSession();
     const summary = provider.getViewSummary();
@@ -3376,18 +3367,22 @@ function activate(context) {
     activeAgentsStatusItem.tooltip = buildActiveAgentsStatusTooltip(selectedSession, summary);
     activeAgentsStatusItem.show();
   };
-  updateCommitInput(null);
   updateStatusBar();
+  const readCommitMessageForSession = async (session) => {
+    const rawMessage = await vscode.window.showInputBox?.({
+      prompt: `Commit ${sessionIdentityLabel(session)} worktree`,
+      placeHolder: sessionCommitPlaceholder(session),
+      ignoreFocusOut: true,
+    });
+    if (rawMessage === undefined) {
+      return undefined;
+    }
+    return String(rawMessage).trim();
+  };
   const commitSelectedSession = async () => {
     const selectedSession = provider.getSelectedSession();
     if (!selectedSession?.worktreePath) {
       vscode.window.showInformationMessage?.('Pick an Active Agents session first.');
-      return;
-    }
-
-    const message = String(sourceControl.inputBox.value || '').trim();
-    if (!message) {
-      vscode.window.showInformationMessage?.('Enter a commit message first.');
       return;
     }
 
@@ -3398,10 +3393,18 @@ function activate(context) {
       return;
     }
 
+    const message = await readCommitMessageForSession(selectedSession);
+    if (message === undefined) {
+      return;
+    }
+    if (!message) {
+      vscode.window.showInformationMessage?.('Enter a commit message first.');
+      return;
+    }
+
     try {
       stageWorktreeForCommit(selectedSession.worktreePath);
       commitWorktree(selectedSession.worktreePath, message);
-      sourceControl.inputBox.value = '';
       refresh();
     } catch (error) {
       const failure = formatGitCommandFailure(error);
@@ -3412,10 +3415,6 @@ function activate(context) {
       vscode.window.showErrorMessage?.(`Active Agents commit failed: ${failure}`);
     }
   };
-  sourceControl.acceptInputCommand = {
-    command: 'gitguardex.activeAgents.commitSelectedSession',
-    title: 'Commit Selected Session',
-  };
   const interval = setInterval(refresh, REFRESH_POLL_INTERVAL_MS);
   const refreshLockRegistry = (uri) => {
     if (uri?.fsPath) {
@@ -3425,18 +3424,15 @@ function activate(context) {
   };
 
   provider.onDidChangeSelectedSession((session) => {
-    updateCommitInput(session);
     updateStatusBar();
     decorationProvider.refresh();
   });
   provider.onDidChangeTreeData(() => {
-    updateCommitInput(provider.getSelectedSession());
     updateStatusBar();
   });
 
   context.subscriptions.push(
     treeView,
-    sourceControl,
     activeAgentsStatusItem,
     inspectPanelManager,
     refreshController,
