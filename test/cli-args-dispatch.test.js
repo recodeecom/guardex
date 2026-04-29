@@ -215,6 +215,7 @@ test('shared context keeps the drift-prone help text, gitignore paths, and relea
 
   assert.match(descriptions.get('setup'), /--current/);
   assert.match(descriptions.get('doctor'), /--current/);
+  assert.ok(MANAGED_GITIGNORE_PATHS.includes('.codex/'));
   assert.ok(MANAGED_GITIGNORE_PATHS.includes('!.vscode/'));
   assert.ok(MANAGED_GITIGNORE_PATHS.includes('.vscode/*'));
   assert.ok(MANAGED_GITIGNORE_PATHS.includes('!.vscode/settings.json'));

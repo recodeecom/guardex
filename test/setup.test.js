@@ -160,6 +160,7 @@ test('setup provisions workflow files and repo config', () => {
   assert.doesNotMatch(gitignoreContent, /^scripts\/agent-file-locks\.py$/m);
   assert.match(gitignoreContent, /^\.githooks$/m);
   assert.doesNotMatch(gitignoreContent, /^\.githooks\/pre-commit$/m);
+  assert.match(gitignoreContent, /^\.codex\/$/m);
   assert.match(gitignoreContent, /\.omx\//);
   assert.match(gitignoreContent, /\.omc\//);
   assert.match(gitignoreContent, /oh-my-codex\//);

@@ -289,6 +289,7 @@ const MANAGED_REPO_SCAN_IGNORED_FOLDERS = [
 const MANAGED_GITIGNORE_PATHS = [
   '.omx/',
   '.omc/',
+  '.codex/',
   '!.vscode/',
   '.vscode/*',
   '!.vscode/settings.json',

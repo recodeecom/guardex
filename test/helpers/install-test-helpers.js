@@ -136,6 +136,7 @@ function runHumanCmd(cmd, args, cwd, options = {}) {
 
 function assertZeroCopyManagedGitignore(content) {
   assert.match(content, /# multiagent-safety:START/);
+  assert.match(content, /^\.codex\/$/m);
   assert.match(content, /^!\.vscode\/$/m);
   assert.match(content, /^\.vscode\/\*$/m);
   assert.match(content, /^!\.vscode\/settings\.json$/m);
