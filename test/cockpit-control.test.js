@@ -79,7 +79,7 @@ test('applyCockpitAction selects sessions and preserves selection across refresh
   assert.equal(state.selectedSessionId, 'two');
 });
 
-test('applyCockpitAction returns menu intents without launching agents', () => {
+test('applyCockpitAction returns pane menu intents without backend execution', () => {
   let state = applyCockpitAction({}, {
     type: 'refresh',
     cockpitState: snapshot([session('one')]),
@@ -91,11 +91,61 @@ test('applyCockpitAction returns menu intents without launching agents', () => {
 
   state = applyCockpitAction(state, { type: 'key', key: '\r' });
   assert.deepEqual(state.lastIntent, {
-    type: 'agent:start',
-    agent: 'claude',
-    base: 'main',
+    type: 'view',
+    sessionId: 'one',
+    branch: 'agent/codex/one',
+    worktreePath: '/tmp/one',
   });
   assert.equal(state.shouldExit, false);
+});
+
+test('applyCockpitAction opens pane menu with m and Alt+Shift+M', () => {
+  const baseState = applyCockpitAction({}, {
+    type: 'refresh',
+    cockpitState: snapshot([session('one')]),
+  });
+
+  assert.equal(applyCockpitAction(baseState, { type: 'key', key: 'm' }).mode, 'menu');
+  assert.equal(applyCockpitAction(baseState, { type: 'key', key: '\u001bM' }).mode, 'menu');
+  assert.equal(applyCockpitAction(baseState, { type: 'key', key: '\u001bm' }).mode, 'menu');
+  assert.equal(applyCockpitAction(baseState, { type: 'key', key: 'Alt+Shift+M' }).mode, 'menu');
+  assert.equal(applyCockpitAction(baseState, { type: 'key', key: { name: 'm', alt: true, shift: true } }).mode, 'menu');
+});
+
+test('applyCockpitAction closes pane menu with Escape', () => {
+  const baseState = applyCockpitAction({}, {
+    type: 'refresh',
+    cockpitState: snapshot([session('one')]),
+  });
+
+  const menuState = applyCockpitAction(baseState, { type: 'key', key: 'm' });
+  const closedState = applyCockpitAction(menuState, { type: 'key', key: '\u001b' });
+
+  assert.equal(menuState.mode, 'menu');
+  assert.equal(closedState.mode, 'details');
+  assert.equal(closedState.lastIntent, null);
+});
+
+test('applyCockpitAction routes pane menu hotkeys to pane action intents', () => {
+  let state = applyCockpitAction({}, {
+    type: 'refresh',
+    cockpitState: snapshot([session('one')]),
+  });
+
+  state = applyCockpitAction(state, { type: 'key', key: 'x' });
+
+  assert.deepEqual(state.lastIntent, {
+    type: 'close',
+    sessionId: 'one',
+    branch: 'agent/codex/one',
+    worktreePath: '/tmp/one',
+  });
+
+  state = applyCockpitAction(state, { type: 'key', key: 'P' });
+  assert.equal(state.lastIntent.type, 'project-focus');
+
+  state = applyCockpitAction(state, { type: 'key', key: 'r' });
+  assert.equal(state.lastIntent.type, 'reopen-closed-worktree');
 });
 
 test('renderControlFrame renders sidebar with details, menu, and settings modes', () => {
@@ -111,9 +161,9 @@ test('renderControlFrame renders sidebar with details, menu, and settings modes'
   assert.match(details, /session: one/);
 
   const menu = renderControlFrame(applyCockpitAction(baseState, { type: 'key', key: 'm' }));
-  assert.match(menu, /menu/);
-  assert.match(menu, /> Start agent/);
-  assert.match(menu, /Open terminal/);
+  assert.match(menu, /Menu: codex/);
+  assert.match(menu, /View\s+\[j\]/);
+  assert.match(menu, /Project Focus\s+\[P\]/);
 
   const settings = renderControlFrame(applyCockpitAction(baseState, { type: 'key', key: 's' }));
   assert.match(settings, /gx cockpit settings/);
@@ -170,7 +220,7 @@ test('startCockpitControl reads state/settings, refreshes, and handles TTY keys'
 
   input.emit('data', 'm');
   input.emit('data', '\r');
-  assert.equal(controller.getState().lastIntent.type, 'agent:start');
+  assert.equal(controller.getState().lastIntent.type, 'view');
 
   input.emit('data', 'q');
   assert.equal(controller.getState().shouldExit, true);

@@ -1,5 +1,7 @@
 'use strict';
 
+const { PANE_MENU_ACTION_IDS } = require('./pane-menu');
+
 const VALID_MODES = new Set(['main', 'menu', 'settings', 'prompt']);
 
 function action(type, payload = {}) {
@@ -18,14 +20,22 @@ const MAIN_BINDINGS = {
   n: action('new-agent'),
   t: action('terminal'),
   m: action('menu'),
+  'alt-shift-m': action('menu'),
   s: action('settings'),
-  f: action('files'),
+  x: action(PANE_MENU_ACTION_IDS.CLOSE),
+  b: action(PANE_MENU_ACTION_IDS.CREATE_CHILD_WORKTREE),
+  f: action(PANE_MENU_ACTION_IDS.BROWSE_FILES),
+  h: action(PANE_MENU_ACTION_IDS.HIDE_PANE),
+  P: action(PANE_MENU_ACTION_IDS.PROJECT_FOCUS),
+  a: action(PANE_MENU_ACTION_IDS.ADD_AGENT),
+  A: action(PANE_MENU_ACTION_IDS.ADD_TERMINAL),
+  r: action(PANE_MENU_ACTION_IDS.REOPEN_CLOSED_WORKTREE),
+  D: action('doctor'),
   d: action('diff'),
   l: action('locks'),
   y: action('sync'),
   F: action('finish'),
   c: action('cleanup-sessions'),
-  r: action('doctor'),
   q: action('quit'),
   ...NAVIGATION_BINDINGS,
 };
@@ -70,13 +80,19 @@ function normalizeMode(context = {}) {
 
 function normalizeKey(key) {
   if (key && typeof key === 'object') {
+    if ((key.meta || key.alt) && key.shift && String(key.name || key.key || '').toLowerCase() === 'm') {
+      return 'alt-shift-m';
+    }
     return normalizeKey(key.name || key.sequence || key.key || '');
   }
   if (key === '\r' || key === '\n') return 'enter';
+  if (key === '\x1bM' || key === '\x1bm') return 'alt-shift-m';
   if (key === '\x1b') return 'esc';
   if (typeof key !== 'string') return '';
 
   const normalized = key.trim();
+  if (normalized === '\x1bM' || normalized === '\x1bm') return 'alt-shift-m';
+  if (/^alt(?:\+|-)?shift(?:\+|-)?m$/i.test(normalized)) return 'alt-shift-m';
   if (normalized.length === 1) return normalized;
 
   const namedKey = normalized.toLowerCase();
