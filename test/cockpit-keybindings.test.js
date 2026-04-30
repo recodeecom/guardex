@@ -14,8 +14,15 @@ test('defaultKeybindings exposes dmux-style cockpit commands for main mode', () 
   assert.equal(bindings.main.n.type, 'new-agent');
   assert.equal(bindings.main.t.type, 'terminal');
   assert.equal(bindings.main.m.type, 'menu');
+  assert.equal(bindings.main['alt-shift-m'].type, 'menu');
   assert.equal(bindings.main.s.type, 'settings');
-  assert.equal(bindings.main.f.type, 'files');
+  assert.equal(bindings.main.x.type, 'close');
+  assert.equal(bindings.main.b.type, 'create-child-worktree');
+  assert.equal(bindings.main.f.type, 'browse-files');
+  assert.equal(bindings.main.h.type, 'hide-pane');
+  assert.equal(bindings.main.P.type, 'create-pr');
+  assert.equal(bindings.main.a.type, 'add-agent');
+  assert.equal(bindings.main.A.type, 'add-terminal');
   assert.equal(bindings.main.d.type, 'diff');
   assert.equal(bindings.main.l.type, 'locks');
   assert.equal(bindings.main.y.type, 'sync');
@@ -34,6 +41,22 @@ test('resolveKeyAction maps main mode keys to structured actions', () => {
     type: 'finish',
     payload: { key: 'F', mode: 'main' },
   });
+  assert.deepEqual(resolveKeyAction('x', { mode: 'main' }), {
+    type: 'close',
+    payload: { key: 'x', mode: 'main' },
+  });
+  assert.deepEqual(resolveKeyAction('A', { mode: 'main' }), {
+    type: 'add-terminal',
+    payload: { key: 'A', mode: 'main' },
+  });
+  assert.deepEqual(resolveKeyAction('P', { mode: 'main' }), {
+    type: 'create-pr',
+    payload: { key: 'P', mode: 'main' },
+  });
+  assert.deepEqual(resolveKeyAction('r', { mode: 'main' }), {
+    type: 'doctor',
+    payload: { key: 'r', mode: 'main' },
+  });
   assert.deepEqual(resolveKeyAction('ArrowDown', { mode: 'main' }), {
     type: 'next',
     payload: { key: 'down', mode: 'main' },
@@ -45,6 +68,22 @@ test('resolveKeyAction maps main mode keys to structured actions', () => {
   assert.deepEqual(resolveKeyAction('\r', { mode: 'main' }), {
     type: 'view-selected',
     payload: { key: 'enter', mode: 'main' },
+  });
+  assert.deepEqual(resolveKeyAction('\u001bM', { mode: 'main' }), {
+    type: 'menu',
+    payload: { key: 'alt-shift-m', mode: 'main' },
+  });
+  assert.deepEqual(resolveKeyAction('\u001bm', { mode: 'main' }), {
+    type: 'menu',
+    payload: { key: 'alt-shift-m', mode: 'main' },
+  });
+  assert.deepEqual(resolveKeyAction('Alt+Shift+M', { mode: 'main' }), {
+    type: 'menu',
+    payload: { key: 'alt-shift-m', mode: 'main' },
+  });
+  assert.deepEqual(resolveKeyAction({ name: 'm', meta: true, shift: true }, { mode: 'main' }), {
+    type: 'menu',
+    payload: { key: 'alt-shift-m', mode: 'main' },
   });
 });
 
@@ -99,8 +138,8 @@ test('resolveKeyAction defaults unknown modes to main and unknown keys to noop',
     type: 'quit',
     payload: { key: 'q', mode: 'main' },
   });
-  assert.deepEqual(resolveKeyAction('x', { mode: 'main' }), {
+  assert.deepEqual(resolveKeyAction('z', { mode: 'main' }), {
     type: 'noop',
-    payload: { key: 'x', mode: 'main' },
+    payload: { key: 'z', mode: 'main' },
   });
 });

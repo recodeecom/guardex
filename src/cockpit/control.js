@@ -4,6 +4,13 @@ const { readCockpitState } = require('./state');
 const { renderSidebar } = require('./sidebar');
 const { renderSettingsScreen } = require('./settings-render');
 const { runCockpitAction } = require('./action-runner');
+const {
+  PANE_MENU_ITEMS,
+  applyPaneMenuKey,
+  createPaneMenuState,
+  normalizePaneMenuKey,
+  renderPaneMenu,
+} = require('./pane-menu');
 
 const DEFAULT_REFRESH_MS = 2000;
 const DEFAULT_SETTINGS = {
@@ -26,13 +33,9 @@ const SETTINGS_FIELDS = [
   'editorCommand',
 ];
 
-const MENU_ITEMS = [
-  { id: 'start-agent', label: 'Start agent', intent: 'agent:start' },
-  { id: 'terminal', label: 'Open terminal', intent: 'terminal:open' },
-  { id: 'refresh', label: 'Refresh now', intent: 'refresh' },
-  { id: 'settings', label: 'Settings', mode: 'settings' },
-  { id: 'quit', label: 'Quit', intent: 'quit' },
-];
+const MENU_ITEMS = PANE_MENU_ITEMS;
+const PANE_ACTION_IDS = new Set(PANE_MENU_ITEMS.map((item) => item.id));
+const DIRECT_DETAIL_PANE_KEYS = new Set(['x', 'b', 'f', 'h', 'P', 'a', 'A']);
 
 function text(value, fallback = '') {
   if (typeof value === 'string') return value.trim() || fallback;
@@ -65,6 +68,16 @@ function selectedSession(state = {}) {
   const sessions = Array.isArray(state.sessions) ? state.sessions : [];
   if (sessions.length === 0) return null;
   return sessions[clampIndex(state.selectedIndex, sessions.length)] || null;
+}
+
+function paneMenuStateFromControl(state = {}) {
+  const current = normalizeControlState(state);
+  return createPaneMenuState({
+    session: selectedSession(current),
+    selectedIndex: current.menuIndex,
+    hotkeyPriority: false,
+    message: current.paneMenuMessage,
+  });
 }
 
 function firstString(...values) {
@@ -163,6 +176,7 @@ function normalizeControlState(state = {}) {
     menuIndex: wrapIndex(number(state.menuIndex, 0), MENU_ITEMS.length),
     settingsIndex: wrapIndex(number(state.settingsIndex, 0), SETTINGS_FIELDS.length),
     settings: normalizeSettings(state.settings),
+    paneMenuMessage: text(state.paneMenuMessage),
     lastIntent: state.lastIntent || null,
     shouldExit: Boolean(state.shouldExit),
     error: state.error || null,
@@ -225,22 +239,33 @@ function buildIntent(state, kind) {
       value: current.settings[field],
     };
   }
+  if (PANE_ACTION_IDS.has(kind)) {
+    return {
+      type: kind,
+      sessionId: session ? sessionId(session) : '',
+      branch: session ? text(session.branch) : '',
+      worktreePath: session ? text(session.worktreePath) : '',
+    };
+  }
   return { type: kind };
 }
 
 function chooseMenuItem(state) {
   const current = normalizeControlState(state);
-  const item = MENU_ITEMS[current.menuIndex] || MENU_ITEMS[0];
-  if (item.mode) {
+  const result = applyPaneMenuKey(paneMenuStateFromControl(current), 'enter');
+  if (result.action !== 'select') {
     return normalizeControlState({
       ...current,
-      mode: item.mode,
+      menuIndex: result.state.selectedIndex,
+      paneMenuMessage: result.state.message,
       lastIntent: null,
     });
   }
-  const intent = buildIntent(current, item.intent);
+  const intent = buildIntent(current, result.actionId);
   return normalizeControlState({
     ...current,
+    mode: 'details',
+    paneMenuMessage: '',
     shouldExit: intent.type === 'quit',
     lastIntent: intent,
   });
@@ -248,13 +273,21 @@ function chooseMenuItem(state) {
 
 function normalizeKey(value) {
   if (!value) return '';
+  if (value && typeof value === 'object' && !Buffer.isBuffer(value)) {
+    if ((value.meta || value.alt) && value.shift && String(value.name || value.key || '').toLowerCase() === 'm') {
+      return 'alt-shift-m';
+    }
+    return normalizeKey(value.name || value.sequence || value.key || '');
+  }
   const raw = Buffer.isBuffer(value) ? value.toString('utf8') : String(value);
   if (raw === '\u0003') return 'ctrl-c';
+  if (raw === '\u001bM' || raw === '\u001bm') return 'alt-shift-m';
   if (raw === '\u001b') return 'escape';
   if (raw === '\r' || raw === '\n') return 'enter';
   if (raw === '\u001b[A') return 'up';
   if (raw === '\u001b[B') return 'down';
   if (raw === '\t') return 'tab';
+  if (/^alt(?:\+|-)?shift(?:\+|-)?m$/i.test(raw)) return 'alt-shift-m';
   return raw.toLowerCase();
 }
 
@@ -262,6 +295,33 @@ function applyKey(state, rawKey) {
   const current = normalizeControlState(state);
   const key = normalizeKey(rawKey);
   const mode = current.mode;
+
+  if (mode === 'menu') {
+    const result = applyPaneMenuKey(paneMenuStateFromControl(current), rawKey);
+    if (result.action === 'cancel') {
+      return normalizeControlState({
+        ...current,
+        mode: 'details',
+        paneMenuMessage: '',
+        lastIntent: null,
+      });
+    }
+    if (result.action === 'select') {
+      return normalizeControlState({
+        ...current,
+        mode: 'details',
+        menuIndex: result.state.selectedIndex,
+        paneMenuMessage: '',
+        lastIntent: buildIntent(current, result.actionId),
+      });
+    }
+    return normalizeControlState({
+      ...current,
+      menuIndex: result.state.selectedIndex,
+      paneMenuMessage: result.state.message,
+      lastIntent: null,
+    });
+  }
 
   if (key === 'ctrl-c' || key === 'q') {
     return normalizeControlState({
@@ -284,10 +344,26 @@ function applyKey(state, rawKey) {
       lastIntent: null,
     });
   }
-  if (key === 'm' || key === 'tab') {
+  if (key === 'm' || key === 'tab' || key === 'alt-shift-m') {
     return normalizeControlState({
       ...current,
       mode: 'menu',
+      paneMenuMessage: '',
+      lastIntent: null,
+    });
+  }
+  if (DIRECT_DETAIL_PANE_KEYS.has(normalizePaneMenuKey(rawKey))) {
+    const result = applyPaneMenuKey(paneMenuStateFromControl(current), rawKey);
+    if (result.action === 'select') {
+      return normalizeControlState({
+        ...current,
+        paneMenuMessage: '',
+        lastIntent: buildIntent(current, result.actionId),
+      });
+    }
+    return normalizeControlState({
+      ...current,
+      paneMenuMessage: result.state.message,
       lastIntent: null,
     });
   }
@@ -410,7 +486,7 @@ function renderDetailsPanel(state) {
     lines.push(`locks: ${Number.isFinite(session.lockCount) ? session.lockCount : 0}`);
   }
 
-  lines.push('', 'keys: up/down select  m menu  s settings  r refresh  q quit');
+  lines.push('', 'keys: up/down select  m/Alt+Shift+M menu  x/b/f/h/P/a/A pane actions  s settings  r refresh  q quit');
   if (current.error) {
     lines.push('', `error: ${text(current.error)}`);
   }
@@ -422,21 +498,7 @@ function renderDetailsPanel(state) {
 
 function renderMenuPanel(state) {
   const current = normalizeControlState(state);
-  const lines = [
-    'menu',
-    '',
-  ];
-
-  MENU_ITEMS.forEach((item, index) => {
-    const marker = index === current.menuIndex ? '>' : ' ';
-    lines.push(`${marker} ${item.label}`);
-  });
-
-  lines.push('', 'keys: up/down move  enter choose  esc details');
-  if (current.lastIntent) {
-    lines.push('', `intent: ${current.lastIntent.type}`);
-  }
-  return `${lines.join('\n')}\n`;
+  return renderPaneMenu(paneMenuStateFromControl(current), { width: 72 });
 }
 
 function renderSettingsPanel(state) {
