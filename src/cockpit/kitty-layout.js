@@ -3,6 +3,7 @@
 const { readCockpitSettings } = require('./settings');
 const { readCockpitState } = require('./state');
 const kittyRuntime = require('../kitty/runtime');
+const kittyTerminal = require('../terminal/kitty');
 
 const DEFAULT_SESSION_NAME = 'guardex';
 const DEFAULT_COLUMNS = 120;
@@ -435,6 +436,66 @@ function createKittyCockpitPlan(options = {}) {
   };
 }
 
+function shouldBootstrapHost(options = {}) {
+  if (options.bootstrap === true) return true;
+  if (options.bootstrap === false) return false;
+  if (options.host === true) return true;
+  if (options.host === false) return false;
+  const env = options.env && typeof options.env === 'object' ? options.env : process.env;
+  if (firstText(env.KITTY_LISTEN_ON)) return false;
+  return Boolean(options.bootstrapWhenHostless);
+}
+
+function injectRemoteControlIntoPlan(plan, socket) {
+  if (!socket || !plan || !Array.isArray(plan.commands)) return plan;
+  const inject = (args) => kittyTerminal.injectRemoteControl(args, socket);
+  const updatedCommands = plan.commands.map((command) => {
+    if (!command || !Array.isArray(command.args)) return command;
+    return { ...command, args: inject(command.args) };
+  });
+  const updatedSteps = Array.isArray(plan.steps)
+    ? plan.steps.map((step) => {
+        if (!step || !step.command || !Array.isArray(step.command.args)) return step;
+        return {
+          ...step,
+          command: { ...step.command, args: inject(step.command.args) },
+        };
+      })
+    : plan.steps;
+  return {
+    ...plan,
+    host: { socket },
+    commands: updatedCommands,
+    steps: updatedSteps,
+  };
+}
+
+function bootstrapHostIfRequested(options, repoRoot) {
+  if (!shouldBootstrapHost(options)) return null;
+  const sessionName = text(options.sessionName, DEFAULT_SESSION_NAME);
+  const dryRun = Boolean(options.dryRun);
+  const backend = options.backend && typeof options.backend.bootstrapHost === 'function'
+    ? options.backend
+    : kittyTerminal.createKittyBackend({
+        kittyBin: options.kittyBin,
+        env: options.env,
+        runtime: options.hostRuntime,
+        runner: options.hostRunner,
+        dryRun,
+      });
+  return backend.bootstrapHost({
+    repoRoot,
+    socket: options.socket,
+    socketPrefix: options.socketPrefix,
+    title: text(options.controlTitle, `${sessionName}: cockpit`),
+    fs: options.fs,
+    spawn: options.spawn,
+    timeoutMs: options.hostTimeoutMs,
+    intervalMs: options.hostIntervalMs,
+    sleep: options.sleep,
+  });
+}
+
 function openKittyCockpit(options = {}) {
   const repoRoot = requireText(
     firstText(options.repoRoot, options.repoPath, options.target, process.cwd()),
@@ -455,7 +516,10 @@ function openKittyCockpit(options = {}) {
     dryRun: options.dryRun,
     focusControl: options.focusControl,
   };
-  const plan = buildKittyCockpitPlan(state, settings);
+  const host = bootstrapHostIfRequested(options, repoRoot);
+  const socket = host && host.socket ? host.socket : '';
+  const basePlan = buildKittyCockpitPlan(state, settings);
+  const plan = socket ? injectRemoteControlIntoPlan(basePlan, socket) : basePlan;
   const execution = kittyRuntime.openKittyCockpit({
     plan,
     dryRun: plan.dryRun,
@@ -470,6 +534,7 @@ function openKittyCockpit(options = {}) {
     sessionName: plan.sessionName,
     repoRoot: plan.repoRoot,
     dryRun: plan.dryRun,
+    host: host || null,
     plan,
     execution,
   };
