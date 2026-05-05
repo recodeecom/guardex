@@ -43,12 +43,44 @@ gx cockpit --backend kitty
 gx cockpit --backend tmux
 ```
 
-`gx cockpit` supports `--backend auto|kitty|tmux`. The default remains
-tmux unless `GUARDEX_COCKPIT_BACKEND` is set. `auto` uses Kitty when
-Kitty remote control answers and otherwise falls back to tmux. Kitty
-mode requires Kitty remote control. tmux remains supported, and the
-backend choice does not change the safety model: branches, worktrees,
-locks, PR-only finish, and cleanup rules stay the same.
+`gx cockpit` supports `--backend auto|kitty|tmux`. `auto` is the
+default; it uses Kitty when Kitty remote control answers and otherwise
+falls back to tmux. `GUARDEX_COCKPIT_BACKEND` overrides the default.
+The backend choice does not change the safety model: branches,
+worktrees, locks, PR-only finish, and cleanup rules stay the same.
+
+### Kitty host bootstrap (`--host`)
+
+Kitty mode normally assumes the cockpit is launched from inside a Kitty
+window with `allow_remote_control yes` already set in `kitty.conf`. If
+you want `gx cockpit` to spawn its own Kitty host instead — the
+"dmux-style" experience where one command opens a fresh Kitty window
+and tiles agent lanes inside it — pass `--host`:
+
+```bash
+gx cockpit --host
+gx cockpit --host --socket /tmp/gx-cockpit.sock
+gx cockpit --host --session guardex-dev
+```
+
+`--host` (alias `--bootstrap-kitty`) does the following:
+
+1. Spawns `kitty -o allow_remote_control=yes -o listen_on=unix:<sock>`
+   detached, with the repo root as `--directory`.
+2. Waits for the listen socket to appear, then prepends
+   `--to=unix:<sock>` to every subsequent `kitty @ launch`,
+   `@ focus-window`, `@ send-text`, etc.
+3. Falls back through the normal Kitty layout plan: control pane,
+   one pane per active `agent/*` lane, optional details pane.
+
+Pass `--socket <path>` to pin a stable socket path (useful if other
+tools — or `gx agents start` in a follow-up shell — should target the
+same Kitty host). Pass `--no-host` to force the legacy "must already be
+inside Kitty" mode.
+
+`--host` requires the `kitty` binary on `PATH` (or `GUARDEX_KITTY_BIN`
+set). It does not require `allow_remote_control` to be enabled in
+`kitty.conf`, because the spawned host is configured inline via `-o`.
 
 ## Start agent lanes
 

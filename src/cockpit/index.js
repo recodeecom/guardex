@@ -16,6 +16,8 @@ function parseCockpitArgs(rawArgs = []) {
     backend: process.env.GUARDEX_COCKPIT_BACKEND || DEFAULT_BACKEND,
     attach: false,
     target: process.cwd(),
+    host: undefined,
+    socket: undefined,
   };
 
   for (let index = 0; index < rawArgs.length; index += 1) {
@@ -26,6 +28,40 @@ function parseCockpitArgs(rawArgs = []) {
     }
     if (arg === '--kitty') {
       options.backend = 'kitty';
+      continue;
+    }
+    if (arg === '--host' || arg === '--bootstrap-kitty') {
+      options.host = true;
+      if (!options.backend || options.backend === 'auto' || options.backend === DEFAULT_BACKEND) {
+        options.backend = 'kitty';
+      }
+      continue;
+    }
+    if (arg === '--no-host' || arg === '--no-bootstrap-kitty') {
+      options.host = false;
+      continue;
+    }
+    if (arg === '--socket') {
+      const next = rawArgs[index + 1];
+      if (!next || next.startsWith('-')) {
+        throw new Error('--socket requires a path');
+      }
+      options.socket = next;
+      if (options.host !== false) options.host = true;
+      if (!options.backend || options.backend === 'auto' || options.backend === DEFAULT_BACKEND) {
+        options.backend = 'kitty';
+      }
+      index += 1;
+      continue;
+    }
+    if (arg.startsWith('--socket=')) {
+      const next = arg.slice('--socket='.length);
+      if (!next) throw new Error('--socket requires a path');
+      options.socket = next;
+      if (options.host !== false) options.host = true;
+      if (!options.backend || options.backend === 'auto' || options.backend === DEFAULT_BACKEND) {
+        options.backend = 'kitty';
+      }
       continue;
     }
     if (arg === '--session') {
@@ -176,6 +212,15 @@ function openWithBackend(backend, options, repoRoot, controlCommand, deps = {}) 
       runner: deps.kittyRunner || deps.runner,
       kittyBin: deps.kittyBin || env.GUARDEX_KITTY_BIN,
       env,
+      backend,
+      bootstrap: options.host === true ? true : options.host === false ? false : undefined,
+      bootstrapWhenHostless: false,
+      socket: options.socket,
+      hostRunner: deps.kittyHostRunner,
+      hostRuntime: deps.kittyHostRuntime,
+      spawn: deps.spawn,
+      fs: deps.fs,
+      sleep: deps.sleep,
     });
     const action = result && result.action ? result.action : 'created';
     writeOpenedCockpitMessage({ backend, action, options, repoRoot, controlCommand, stdout, toolName });

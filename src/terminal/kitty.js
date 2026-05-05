@@ -1,13 +1,20 @@
 'use strict';
 
 const cp = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 const DEFAULT_KITTY_BIN = 'kitty';
 const DEFAULT_COCKPIT_TITLE = 'gx cockpit';
 const DEFAULT_AGENT_TITLE = 'agent';
 const DEFAULT_TERMINAL_TITLE = 'terminal';
+const DEFAULT_HOST_SOCKET_PREFIX = 'gx-cockpit-';
+const DEFAULT_HOST_READY_TIMEOUT_MS = 5000;
+const DEFAULT_HOST_POLL_INTERVAL_MS = 50;
 const KITTY_MISSING_MESSAGE = 'Kitty is not installed or not on PATH. Install Kitty or run gx cockpit --backend tmux.';
 const KITTY_REMOTE_CONTROL_MESSAGE = 'Kitty is installed, but remote control is not available. Enable allow_remote_control in kitty.conf or run gx cockpit --backend tmux.';
+const KITTY_HOST_SOCKET_TIMEOUT_MESSAGE = 'Bootstrap Kitty host did not expose a remote-control socket in time.';
 
 function text(value, fallback = '') {
   if (typeof value === 'string') return value.trim() || fallback;
@@ -42,18 +49,69 @@ function kittyBin(config = {}, options = {}) {
   return text(config.kittyBin || envValue, DEFAULT_KITTY_BIN);
 }
 
+function hostSocket(config = {}) {
+  return text(config.hostSocket || config.socket || config.to, '');
+}
+
+function injectRemoteControl(args, socket) {
+  const value = text(socket);
+  if (!value) return args;
+  if (args.length === 0 || args[0] !== '@') return args;
+  if (args.some((arg) => typeof arg === 'string' && arg.startsWith('--to='))) return args;
+  return ['@', `--to=${value}`, ...args.slice(1)];
+}
+
 function commandShape(args, config = {}) {
   return {
     cmd: kittyBin(config),
-    args,
+    args: injectRemoteControl(args, hostSocket(config)),
   };
 }
 
 function commandShapeWithEnv(args, config = {}) {
   return {
     cmd: kittyBin(config, { allowEnv: true }),
-    args,
+    args: injectRemoteControl(args, hostSocket(config)),
   };
+}
+
+function defaultHostSocketPath(prefix = DEFAULT_HOST_SOCKET_PREFIX) {
+  const random = Math.random().toString(36).slice(2, 10);
+  return path.join(os.tmpdir(), `${prefix}${process.pid}-${Date.now()}-${random}.sock`);
+}
+
+function buildKittyHostBootstrapCommand(options = {}, config = {}) {
+  const repoRoot = requireText(options.repoRoot || options.cwd, 'kitty host repoRoot');
+  const socket = requireText(options.socket || options.listenOn, 'kitty host socket');
+  const listenOn = socket.includes(':') ? socket : `unix:${socket}`;
+  const args = [
+    '-o', 'allow_remote_control=yes',
+    '-o', `listen_on=${listenOn}`,
+    '--listen-on', listenOn,
+    '--directory', repoRoot,
+    '--title', text(options.title, DEFAULT_COCKPIT_TITLE),
+  ];
+  if (options.hold) args.push('--hold');
+  if (options.detach !== false) args.push('--detach');
+  appendCommandArgv(args, options);
+  return {
+    cmd: kittyBin(config, { allowEnv: true }),
+    args,
+    socket,
+    listenOn,
+  };
+}
+
+function socketReady(socket, options = {}) {
+  if (!socket) return false;
+  const candidate = socket.startsWith('unix:') ? socket.slice('unix:'.length) : socket;
+  const fsImpl = options.fs || fs;
+  if (typeof fsImpl.existsSync !== 'function') return false;
+  try {
+    return Boolean(fsImpl.existsSync(candidate));
+  } catch (_error) {
+    return false;
+  }
 }
 
 function appendOption(args, flag, value) {
@@ -418,6 +476,56 @@ function createKittyBackend(config = {}) {
     return assertResult(run(shape, { ...options, input }), message);
   }
 
+  function spawnHost(command, options = {}) {
+    const spawn = options.spawn || cp.spawn;
+    const env = mergeEnv(config, options) || process.env;
+    const child = spawn(command.cmd, command.args, {
+      cwd: options.cwd || process.cwd(),
+      env: { ...process.env, ...env },
+      detached: options.detached !== false,
+      stdio: options.stdio || 'ignore',
+    });
+    if (options.detached !== false && typeof child.unref === 'function') child.unref();
+    return child;
+  }
+
+  function bootstrapHost(options = {}) {
+    const socket = options.socket || defaultHostSocketPath(options.socketPrefix);
+    const command = buildKittyHostBootstrapCommand({ ...options, socket }, config);
+    if (dryRun) {
+      return makeDryRunPlan('bootstrap-kitty-host', command, {
+        socket: command.socket,
+        listenOn: command.listenOn,
+      });
+    }
+    const child = spawnHost(command, options);
+    const timeoutMs = Number.isFinite(options.timeoutMs) && options.timeoutMs > 0
+      ? options.timeoutMs
+      : DEFAULT_HOST_READY_TIMEOUT_MS;
+    const intervalMs = Number.isFinite(options.intervalMs) && options.intervalMs > 0
+      ? options.intervalMs
+      : DEFAULT_HOST_POLL_INTERVAL_MS;
+    const fsImpl = options.fs || fs;
+    const sleep = options.sleep || ((ms) => {
+      const end = Date.now() + ms;
+      while (Date.now() < end) { /* busy wait, intentionally sync */ }
+    });
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (socketReady(command.socket, { fs: fsImpl })) {
+        return {
+          action: 'bootstrap-kitty-host',
+          command,
+          socket: command.socket,
+          listenOn: command.listenOn,
+          pid: child && child.pid,
+        };
+      }
+      sleep(intervalMs);
+    }
+    throw new Error(KITTY_HOST_SOCKET_TIMEOUT_MESSAGE);
+  }
+
   return {
     name: 'kitty',
     isAvailable() {
@@ -429,6 +537,11 @@ function createKittyBackend(config = {}) {
     missingMessage: KITTY_MISSING_MESSAGE,
     dryRunPlan(action, commands, extra = {}) {
       return makeDryRunPlan(action, commands, extra);
+    },
+    bootstrapHost,
+    buildHostCommand(options = {}) {
+      const socket = options.socket || defaultHostSocketPath(options.socketPrefix);
+      return buildKittyHostBootstrapCommand({ ...options, socket }, config);
     },
     openCockpitLayout(options = {}) {
       return execute(
@@ -482,6 +595,7 @@ module.exports = {
   DEFAULT_KITTY_BIN,
   KITTY_MISSING_MESSAGE,
   KITTY_REMOTE_CONTROL_MESSAGE,
+  KITTY_HOST_SOCKET_TIMEOUT_MESSAGE,
   buildKittyLaunchCommand,
   buildKittyFocusCommand,
   buildKittyCloseCommand,
@@ -497,6 +611,10 @@ module.exports = {
   buildFocusPaneCommand,
   buildClosePaneCommand,
   buildSendTextCommand,
+  buildKittyHostBootstrapCommand,
+  defaultHostSocketPath,
+  injectRemoteControl,
+  socketReady,
   createBackend,
   createKittyBackend,
   sendTextInput,
