@@ -1,5 +1,6 @@
 'use strict';
 
+const path = require('node:path');
 const { readCockpitState } = require('./state');
 const { renderSidebar } = require('./sidebar');
 const { renderSettingsScreen } = require('./settings-render');
@@ -241,6 +242,7 @@ function buildIntent(state, kind) {
       type: 'agent:start',
       agent: current.settings.defaultAgent,
       base: current.settings.defaultBase,
+      task: text(current.newAgentInput || ''),
     };
   }
   if (kind === 'terminal:open') {
@@ -436,6 +438,20 @@ function applyKey(state, rawKey) {
       lastIntent: null,
     });
   }
+  if (mode === 'new-agent') {
+    const raw = typeof rawKey === 'string' ? rawKey : (rawKey && rawKey.sequence) || '';
+    if (raw === '' || raw === '\b') {
+      const next = (current.newAgentInput || '').slice(0, -1);
+      return normalizeControlState({ ...current, newAgentInput: next, lastIntent: null });
+    }
+    if (typeof raw === 'string' && raw.length === 1) {
+      const code = raw.charCodeAt(0);
+      if (code >= 0x20 && code <= 0x7e) {
+        const next = `${current.newAgentInput || ''}${raw}`;
+        return normalizeControlState({ ...current, newAgentInput: next, lastIntent: null });
+      }
+    }
+  }
   if (key === 'n') {
     return openActionRow(current, 'new-agent');
   }
@@ -468,10 +484,12 @@ function applyKey(state, rawKey) {
       });
     }
     if (mode === 'new-agent') {
+      const intent = buildIntent(current, 'agent:start');
       return normalizeControlState({
         ...current,
         mode: 'main',
-        lastIntent: buildIntent(current, 'agent:start'),
+        newAgentInput: '',
+        lastIntent: intent,
       });
     }
     if (mode === 'terminal') {
@@ -699,14 +717,24 @@ function renderShortcutsPanel() {
 
 function renderNewAgentPanel(state) {
   const current = normalizeControlState(state);
+  const input = text(current.newAgentInput || '');
+  const repoLabel = current.repoPath ? path.basename(current.repoPath) : 'project';
+  const inputBox = `+${'-'.repeat(64)}+`;
+  const inputRow = `| > ${input}_${' '.repeat(Math.max(60 - input.length, 0))} |`;
   return [
-    'new agent',
+    `+ New Pane - ${repoLabel}`,
     '',
-    `agent: ${current.settings.defaultAgent}`,
-    `base: ${current.settings.defaultBase}`,
+    `Project: ${repoLabel} (${current.repoPath || '-'})`,
+    `Agent:   ${current.settings.defaultAgent}`,
+    `Base:    ${current.settings.defaultBase}`,
     '',
-    'Enter: open a guarded agent lane in Kitty',
-    'Esc: back to main',
+    'Enter a prompt for your AI agent.',
+    '',
+    inputBox,
+    inputRow,
+    inputBox,
+    '',
+    'Enter to submit  ·  Backspace to edit  ·  Esc to cancel',
     '',
   ].join('\n');
 }
