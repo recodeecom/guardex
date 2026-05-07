@@ -134,6 +134,7 @@ function autoCommitWorktreeForFinish(repoRoot, worktreePath, branch, options) {
 }
 
 function cleanup(rawArgs) {
+  const activeCwd = process.cwd();
   const options = parseCleanupArgs(rawArgs);
   const repoRoot = resolveRepoRoot(options.target);
 
@@ -168,7 +169,11 @@ function cleanup(rawArgs) {
   }
 
   const runCleanupCycle = () => {
-    const runResult = runPackageAsset('worktreePrune', args, { cwd: repoRoot, stdio: 'inherit' });
+    const runResult = runPackageAsset('worktreePrune', args, {
+      cwd: repoRoot,
+      stdio: 'inherit',
+      env: { GUARDEX_PRUNE_ACTIVE_CWD: activeCwd },
+    });
     if (runResult.status !== 0) {
       throw new Error('Cleanup command failed');
     }
@@ -234,6 +239,7 @@ function merge(rawArgs) {
 }
 
 function finish(rawArgs, defaults = {}) {
+  const activeCwd = process.cwd();
   const options = parseFinishArgs(rawArgs, defaults);
   const repoRoot = resolveRepoRoot(options.target);
 
@@ -325,7 +331,11 @@ function finish(rawArgs, defaults = {}) {
         continue;
       }
 
-      const finishResult = runPackageAsset('branchFinish', finishArgs, { cwd: repoRoot, stdio: 'pipe' });
+      const finishResult = runPackageAsset('branchFinish', finishArgs, {
+        cwd: repoRoot,
+        stdio: 'pipe',
+        env: { GUARDEX_FINISH_ACTIVE_CWD: activeCwd },
+      });
       if (finishResult.stdout) {
         process.stdout.write(finishResult.stdout);
       }

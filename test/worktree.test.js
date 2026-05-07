@@ -110,6 +110,29 @@ test('worktree prune preserves dirty agent worktrees unless --force-dirty is use
 });
 
 
+test('worktree prune skips managed worktree containing forwarded active cwd', () => {
+  const repoDir = initRepo();
+  let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  seedCommit(repoDir);
+
+  const worktreePath = path.join(repoDir, '.omx', 'agent-worktrees', 'agent__test-active-cwd-prune');
+  result = runCmd('git', ['worktree', 'add', '-b', 'agent/test-active-cwd-prune', worktreePath, 'dev'], repoDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const nestedCwd = path.join(worktreePath, 'nested', 'cwd');
+  fs.mkdirSync(nestedCwd, { recursive: true });
+
+  result = runWorktreePrune(['--target', repoDir, '--delete-branches'], nestedCwd);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Skipping active cwd worktree:/);
+  assert.equal(fs.existsSync(worktreePath), true, 'active cwd worktree should remain');
+
+  const branchResult = runCmd('git', ['show-ref', '--verify', '--quiet', 'refs/heads/agent/test-active-cwd-prune'], repoDir);
+  assert.equal(branchResult.status, 0, 'active cwd branch should remain');
+});
+
+
 test('worktree prune --only-dirty-worktrees removes clean agent worktrees but keeps unmerged branch refs', () => {
   const repoDir = initRepo();
   let result = runNode(['setup', '--target', repoDir, '--no-global-install'], repoDir);

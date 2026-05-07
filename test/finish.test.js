@@ -839,7 +839,7 @@ exit 1
 });
 
 
-test('agent-branch-finish cleanup succeeds from active agent worktree when base branch is checked out elsewhere', () => {
+test('agent-branch-finish cleanup preserves forwarded active agent cwd when base branch is checked out elsewhere', () => {
   const repoDir = initRepo();
   seedCommit(repoDir);
   attachOriginRemote(repoDir);
@@ -897,7 +897,7 @@ exit 1
 `);
 
   const finish = runBranchFinish(
-    ['--branch', 'agent/test-active-worktree-cleanup', '--base', 'dev', '--mode', 'pr', '--cleanup'],
+    ['--target', repoDir, '--branch', 'agent/test-active-worktree-cleanup', '--base', 'dev', '--mode', 'pr', '--cleanup'],
     agentSubdir,
     { GUARDEX_GH_BIN: fakeGhPath },
   );

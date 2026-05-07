@@ -165,6 +165,12 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
+finish_active_cwd="${GUARDEX_FINISH_ACTIVE_CWD:-$(pwd -P)}"
+if [[ -d "$finish_active_cwd" ]]; then
+  finish_active_cwd="$(cd "$finish_active_cwd" && pwd -P)"
+else
+  finish_active_cwd=""
+fi
 # The physical cwd may be a subdirectory inside the source worktree. Cleanup
 # decisions need the enclosing worktree root, otherwise finishing from `src/`
 # can delete the caller's cwd and turn a successful merge into a false shell
@@ -177,6 +183,36 @@ else
   common_git_dir="$(cd "$repo_root/$common_git_dir_raw" && pwd -P)"
 fi
 repo_common_root="$(cd "$common_git_dir/.." && pwd -P)"
+
+resolve_same_repo_worktree_for_cwd() {
+  local active_cwd="$1"
+  [[ -n "$active_cwd" && -d "$active_cwd" ]] || return 0
+  git -C "$active_cwd" rev-parse --is-inside-work-tree >/dev/null 2>&1 || return 0
+
+  local active_worktree=""
+  active_worktree="$(git -C "$active_cwd" rev-parse --show-toplevel 2>/dev/null || true)"
+  [[ -n "$active_worktree" ]] || return 0
+
+  local active_common_raw=""
+  local active_common_dir=""
+  active_common_raw="$(git -C "$active_worktree" rev-parse --git-common-dir 2>/dev/null || true)"
+  [[ -n "$active_common_raw" ]] || return 0
+  if [[ "$active_common_raw" == /* ]]; then
+    active_common_dir="$active_common_raw"
+  else
+    active_common_dir="${active_worktree}/${active_common_raw}"
+  fi
+  active_common_dir="$(cd "$active_common_dir" 2>/dev/null && pwd -P)" || return 0
+
+  if [[ "$active_common_dir" == "$common_git_dir" ]]; then
+    cd "$active_worktree" 2>/dev/null && pwd -P
+  fi
+}
+
+active_cwd_worktree="$(resolve_same_repo_worktree_for_cwd "$finish_active_cwd")"
+if [[ -n "$active_cwd_worktree" ]]; then
+  current_worktree="$active_cwd_worktree"
+fi
 
 if [[ -z "$SOURCE_BRANCH" ]]; then
   SOURCE_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
@@ -861,6 +897,10 @@ pivot_to_repo_root_before_prune() {
   fi
 }
 
+run_guardex_prune() {
+  GUARDEX_PRUNE_ACTIVE_CWD="$finish_active_cwd" run_guardex_cli worktree prune "$@"
+}
+
 if [[ "$CLEANUP_AFTER_MERGE" -eq 1 ]]; then
   if [[ "$source_worktree" == "$repo_root" ]]; then
     if is_clean_worktree "$source_worktree"; then
@@ -906,7 +946,7 @@ if [[ "$CLEANUP_AFTER_MERGE" -eq 1 ]]; then
   fi
 
   pivot_to_repo_root_before_prune
-  if ! run_guardex_cli worktree prune "${prune_args[@]}"; then
+  if ! run_guardex_prune "${prune_args[@]}"; then
     echo "[agent-branch-finish] Warning: automatic worktree prune failed." >&2
     echo "[agent-branch-finish] You can run manual cleanup: gx cleanup --base ${BASE_BRANCH}" >&2
   fi
@@ -920,7 +960,7 @@ if [[ "$CLEANUP_AFTER_MERGE" -eq 1 ]]; then
   fi
 else
   pivot_to_repo_root_before_prune
-  if ! run_guardex_cli worktree prune --base "$BASE_BRANCH"; then
+  if ! run_guardex_prune --base "$BASE_BRANCH"; then
     echo "[agent-branch-finish] Warning: temporary worktree prune failed." >&2
   fi
 

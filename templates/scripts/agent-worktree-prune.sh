@@ -82,7 +82,12 @@ if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
 fi
 
 repo_root="$(git rev-parse --show-toplevel)"
-current_pwd="$(pwd -P)"
+current_pwd="${GUARDEX_PRUNE_ACTIVE_CWD:-$(pwd -P)}"
+if [[ -d "$current_pwd" ]]; then
+  current_pwd="$(cd "$current_pwd" && pwd -P)"
+else
+  current_pwd=""
+fi
 repo_common_dir="$(
   git -C "$repo_root" rev-parse --git-common-dir \
     | awk -v root="$repo_root" '{ if ($0 ~ /^\//) { print $0 } else { print root "/" $0 } }'
@@ -431,7 +436,7 @@ process_entry() {
     return
   fi
 
-  if [[ "$wt" == "$current_pwd" ]]; then
+  if [[ -n "$current_pwd" && ( "$wt" == "$current_pwd" || "$current_pwd" == "${wt}"/* ) ]]; then
     skipped_active=$((skipped_active + 1))
     echo "[agent-worktree-prune] Skipping active cwd worktree: ${wt}"
     return

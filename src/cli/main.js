@@ -3493,6 +3493,7 @@ function prompt(rawArgs) {
 }
 
 function branch(rawArgs) {
+  const activeCwd = process.cwd();
   const [subcommand, ...rest] = rawArgs;
   if (subcommand === 'start') {
     const { target, passthrough } = extractTargetedArgs(rest);
@@ -3501,7 +3502,10 @@ function branch(rawArgs) {
   }
   if (subcommand === 'finish') {
     const { target, passthrough } = extractTargetedArgs(rest);
-    invokePackageAsset('branchFinish', passthrough, { cwd: resolveRepoRoot(target) });
+    invokePackageAsset('branchFinish', passthrough, {
+      cwd: resolveRepoRoot(target),
+      env: { GUARDEX_FINISH_ACTIVE_CWD: activeCwd },
+    });
     return;
   }
   if (subcommand === 'merge') return merge(rest);
@@ -3578,10 +3582,14 @@ function locks(rawArgs) {
 }
 
 function worktree(rawArgs) {
+  const activeCwd = process.cwd();
   const [subcommand, ...rest] = rawArgs;
   if (subcommand === 'prune') {
     const { target, passthrough } = extractTargetedArgs(rest);
-    invokePackageAsset('worktreePrune', passthrough, { cwd: resolveRepoRoot(target) });
+    invokePackageAsset('worktreePrune', passthrough, {
+      cwd: resolveRepoRoot(target),
+      env: { GUARDEX_PRUNE_ACTIVE_CWD: activeCwd },
+    });
     return;
   }
   throw new Error(`Usage: ${SHORT_TOOL_NAME} worktree prune [cleanup-options]`);
