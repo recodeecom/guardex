@@ -64,6 +64,36 @@ normalize_bool() {
   esac
 }
 
+gh_api_probe_looks_like_network_failure() {
+  local probe_output="$1"
+  [[ "$probe_output" =~ error[[:space:]]connecting[[:space:]]to[[:space:]]api\.github\.com|Could[[:space:]]not[[:space:]]resolve[[:space:]]host|could[[:space:]]not[[:space:]]resolve[[:space:]]host|Failed[[:space:]]to[[:space:]]connect|failed[[:space:]]to[[:space:]]connect|Network[[:space:]]is[[:space:]]unreachable|network[[:space:]]is[[:space:]]unreachable|Connection[[:space:]]timed[[:space:]]out|connection[[:space:]]timed[[:space:]]out|Temporary[[:space:]]failure[[:space:]]in[[:space:]]name[[:space:]]resolution|temporary[[:space:]]failure[[:space:]]in[[:space:]]name[[:space:]]resolution ]]
+}
+
+ensure_gh_auth_or_explain() {
+  local auth_output probe_output
+  if auth_output="$(gh auth status 2>&1)"; then
+    return 0
+  fi
+
+  if probe_output="$(gh api user --jq .login 2>&1)"; then
+    echo "[review-bot-watch] gh auth status failed, but gh api user succeeded; continuing with usable GitHub auth." >&2
+    return 0
+  fi
+
+  if gh_api_probe_looks_like_network_failure "$probe_output"; then
+    echo "[review-bot-watch] GitHub API is unreachable, so gh cannot validate the stored token." >&2
+    echo "[review-bot-watch] This is a network or Codex sandbox connectivity problem, not proof that the token is invalid." >&2
+    echo "$probe_output" >&2
+    return 1
+  fi
+
+  echo "[review-bot-watch] gh is not authenticated. Run: gh auth login" >&2
+  if [[ -n "$auth_output" ]]; then
+    echo "$auth_output" >&2
+  fi
+  return 1
+}
+
 ONCE=0
 
 while [[ $# -gt 0 ]]; do
@@ -153,8 +183,7 @@ if ! command -v codex >/dev/null 2>&1; then
   exit 127
 fi
 
-if ! gh auth status >/dev/null 2>&1; then
-  echo "[review-bot-watch] gh is not authenticated. Run: gh auth login" >&2
+if ! ensure_gh_auth_or_explain; then
   exit 1
 fi
 

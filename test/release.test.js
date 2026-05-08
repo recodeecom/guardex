@@ -257,6 +257,96 @@ exit 1
 });
 
 
+test('release reports GitHub network failure separately from invalid auth', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedReleasePackageManifest(repoDir);
+  fs.writeFileSync(
+    path.join(repoDir, 'README.md'),
+    `## Release notes
+
+### v${cliVersion}
+- Current release fix.
+`,
+    'utf8',
+  );
+  seedCommit(repoDir);
+
+  const fakeGh = createFakeGhScript(`
+if [[ "$1" == "auth" && "$2" == "status" ]]; then
+  echo "github.com" >&2
+  echo "  X github.com: authentication failed" >&2
+  echo "  - The github.com token in /home/deadpool/.config/gh/hosts.yml is no longer valid." >&2
+  exit 1
+fi
+if [[ "$1" == "api" && "$2" == "user" ]]; then
+  echo "error connecting to api.github.com" >&2
+  exit 1
+fi
+echo "unexpected gh args: $*" >&2
+exit 1
+`);
+
+  const result = runNodeWithEnv(['release'], repoDir, {
+    GUARDEX_RELEASE_REPO: repoDir,
+    GUARDEX_GH_BIN: fakeGh.fakePath,
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /GitHub API is unreachable/);
+  assert.match(result.stderr, /network or sandbox connectivity problem/);
+  assert.doesNotMatch(result.stderr, /Run: gh auth login/);
+});
+
+
+test('release continues when gh api proves auth despite auth status failure', () => {
+  const repoDir = initRepoOnBranch('main');
+  seedReleasePackageManifest(repoDir);
+  fs.writeFileSync(
+    path.join(repoDir, 'README.md'),
+    `## Release notes
+
+### v${cliVersion}
+- Current release fix.
+`,
+    'utf8',
+  );
+  seedCommit(repoDir);
+
+  const markerPath = path.join(repoDir, '.gh-release-auth-fallback-called');
+  const fakeGh = createFakeGhScript(`
+if [[ "$1" == "auth" && "$2" == "status" ]]; then
+  echo "github.com auth status failed" >&2
+  exit 1
+fi
+if [[ "$1" == "api" && "$2" == "user" ]]; then
+  echo "NagyVikt"
+  exit 0
+fi
+if [[ "$1" == "release" && "$2" == "list" ]]; then
+  exit 0
+fi
+if [[ "$1" == "release" && "$2" == "view" ]]; then
+  exit 1
+fi
+if [[ "$1" == "release" && "$2" == "create" ]]; then
+  printf '%s\\n' "$@" > "${markerPath}"
+  printf '%s\\n' "https://example.test/releases/tag/v${cliVersion}"
+  exit 0
+fi
+echo "unexpected gh args: $*" >&2
+exit 1
+`);
+
+  const result = runNodeWithEnv(['release'], repoDir, {
+    GUARDEX_RELEASE_REPO: repoDir,
+    GUARDEX_GH_BIN: fakeGh.fakePath,
+  });
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(fs.readFileSync(markerPath, 'utf8'), /^create$/m);
+});
+
+
 test('typo helper maps relaese/realaese to release', () => {
   const repoDir = initRepoOnBranch('main');
   seedReleasePackageManifest(repoDir);

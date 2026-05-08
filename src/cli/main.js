@@ -3326,6 +3326,25 @@ function renderGeneratedReleaseNotes(entries, currentTag, previousTag) {
   return `GitGuardex ${currentTag}\n\n${intro}\n\n${sections}`;
 }
 
+function describeGhAuthFailure(ghBin, authStatus) {
+  if (authStatus.error) {
+    return `unable to run '${ghBin} auth status': ${authStatus.error.message}`;
+  }
+
+  const authDetails = (authStatus.stderr || authStatus.stdout || '').trim();
+  const apiProbe = run(ghBin, ['api', 'user', '--jq', '.login'], { timeout: 20_000 });
+  if (apiProbe.status === 0) {
+    return '';
+  }
+
+  const apiDetails = (apiProbe.stderr || apiProbe.stdout || apiProbe.error?.message || '').trim();
+  if (/error connecting to api\.github\.com|could not resolve host|failed to connect|network is unreachable|connection timed out|temporary failure in name resolution/i.test(apiDetails)) {
+    return `GitHub API is unreachable, so '${ghBin} auth status' cannot validate the stored token. This is a network or sandbox connectivity problem, not proof that the token is invalid.${apiDetails ? `\n${apiDetails}` : ''}`;
+  }
+
+  return `'${ghBin}' auth is unavailable.${authDetails ? `\n${authDetails}` : ''}`;
+}
+
 function buildReleaseNotesFromReadme(repoRoot, currentTag, previousTag) {
   const readme = readRepoReadme(repoRoot);
   const entries = parseReadmeReleaseEntries(readme);
@@ -3353,12 +3372,11 @@ function release(rawArgs) {
   }
 
   const ghAuthStatus = run(GH_BIN, ['auth', 'status'], { timeout: 20_000 });
-  if (ghAuthStatus.error) {
-    throw new Error(`Release blocked: unable to run '${GH_BIN} auth status': ${ghAuthStatus.error.message}`);
-  }
   if (ghAuthStatus.status !== 0) {
-    const details = (ghAuthStatus.stderr || ghAuthStatus.stdout || '').trim();
-    throw new Error(`Release blocked: '${GH_BIN}' auth is unavailable.${details ? `\n${details}` : ''}`);
+    const ghAuthFailure = describeGhAuthFailure(GH_BIN, ghAuthStatus);
+    if (ghAuthFailure) {
+      throw new Error(`Release blocked: ${ghAuthFailure}`);
+    }
   }
 
   const releasePackageJson = readReleaseRepoPackageJson(repoRoot);

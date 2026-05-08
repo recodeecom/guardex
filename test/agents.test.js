@@ -84,6 +84,36 @@ test('review-bot-watch uses explicit codex-agent flags for argument parsing comp
 });
 
 
+test('review-bot-watch reports GitHub network failure separately from invalid auth', () => {
+  const repoDir = initRepo();
+  seedCommit(repoDir);
+  const fakeGh = createFakeGhScript(`
+if [[ "$1" == "auth" && "$2" == "status" ]]; then
+  echo "github.com" >&2
+  echo "  X github.com: authentication failed" >&2
+  echo "  - The github.com token in /home/deadpool/.config/gh/hosts.yml is no longer valid." >&2
+  exit 1
+fi
+if [[ "$1" == "api" && "$2" == "user" ]]; then
+  echo "error connecting to api.github.com" >&2
+  exit 1
+fi
+echo "unexpected gh args: $*" >&2
+exit 1
+`);
+  const fakeCodex = createFakeBin('codex', 'exit 0');
+
+  const result = runReviewBot(['--once'], repoDir, {
+    PATH: `${fakeGh.fakeBin}:${fakeCodex.fakeBin}:${process.env.PATH}`,
+  });
+
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /GitHub API is unreachable/);
+  assert.match(result.stderr, /network or Codex sandbox connectivity problem/);
+  assert.doesNotMatch(result.stderr, /Run: gh auth login/);
+});
+
+
 test('review command launches local review-bot script and accepts legacy start token', () => {
   const repoDir = initRepo();
   const scriptsDir = path.join(repoDir, 'scripts');
