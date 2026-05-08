@@ -377,7 +377,7 @@ All optional — but if you're running many agents, you probably want them.
 `gx status` auto-detects each one and reports it in the `Global services`
 block.
 
-Install repo skills with `npx skills add recodee/gitguardex`; `npx skills add recodee/` opens the recodee namespace. `gx setup` does not auto-run `npx skills add ...`. If the picker does not show a separate `guardex` skill, that is expected.
+Install repo skills with `npx skills add recodee/gitguardex`; the npm package also ships the root `skills/` catalog so the npx installer can read the GitGuardex skill from the published tarball. `npx skills add recodee/` opens the recodee namespace. `gx setup` does not auto-run `npx skills add ...`. If the picker does not show a separate `guardex` skill, that is expected.
 
 | Tool | What it does | Stars |
 | --- | --- | --- |
