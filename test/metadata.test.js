@@ -268,6 +268,12 @@ test('package manifest ships the extracted src runtime', () => {
   assert.match(pkg.files.join('\n'), /^src$/m);
 });
 
+test('package manifest ships repo skills for npx skills installer', () => {
+  const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  assert.ok(Array.isArray(pkg.files), 'package.json files must stay explicit');
+  assert.match(pkg.files.join('\n'), /^skills$/m);
+});
+
 test('doctor CLI parser stays in src/cli args while the main doctor command stays routable and dead legacy audit stubs stay removed', () => {
   const argsSource = fs.readFileSync(path.join(repoRoot, 'src', 'cli', 'args.js'), 'utf8');
   const cliSource = fs.readFileSync(path.join(repoRoot, 'src', 'cli', 'main.js'), 'utf8');

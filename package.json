@@ -39,6 +39,7 @@
   "files": [
     "bin",
     "src",
+    "skills",
     "templates",
     "README.md",
     "LICENSE",
