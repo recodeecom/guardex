@@ -1532,6 +1532,82 @@ function readPackageJson(repoRoot) {
   }
 }
 
+function hasGitMarker(dirPath) {
+  return fs.existsSync(path.join(dirPath, '.git'));
+}
+
+function shouldSkipRepoDiscoveryDir(dirName) {
+  return new Set([
+    '.git',
+    '.omx',
+    '.omc',
+    'node_modules',
+    'dist',
+    'build',
+    '.next',
+  ]).has(dirName);
+}
+
+function discoverNestedGitRepoRoots(rootPath, maxDepth = 3) {
+  const discovered = [];
+
+  function visit(dirPath, depth) {
+    if (depth > maxDepth) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dirPath, { withFileTypes: true });
+    } catch (_error) {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || shouldSkipRepoDiscoveryDir(entry.name)) {
+        continue;
+      }
+      const childPath = path.join(dirPath, entry.name);
+      if (hasGitMarker(childPath)) {
+        discovered.push(childPath);
+        continue;
+      }
+      visit(childPath, depth + 1);
+    }
+  }
+
+  visit(rootPath, 1);
+  return discovered;
+}
+
+function discoverWorkspaceRepoRoots() {
+  const workspaceFolders = vscode.workspace.workspaceFolders || [];
+  const seen = new Set();
+  const roots = [];
+
+  for (const folder of workspaceFolders) {
+    const rootPath = folder?.uri?.fsPath;
+    if (!rootPath || seen.has(rootPath)) {
+      continue;
+    }
+    seen.add(rootPath);
+    roots.push(rootPath);
+
+    for (const nestedRoot of discoverNestedGitRepoRoots(rootPath)) {
+      if (seen.has(nestedRoot)) {
+        continue;
+      }
+      seen.add(nestedRoot);
+      roots.push(nestedRoot);
+    }
+  }
+
+  return roots;
+}
+
+function repoPickLabel(repoRoot) {
+  const parent = path.basename(path.dirname(repoRoot));
+  const base = path.basename(repoRoot);
+  return parent ? `${parent}/${base}` : base;
+}
+
 function resolveStartAgentCommand(repoRoot, details) {
   const taskArg = shellQuote(details.taskName);
   const agentArg = shellQuote(details.agentName);
@@ -2822,23 +2898,23 @@ function resolveSessionActivityIconId(activityKind) {
 }
 
 async function pickRepoRoot() {
-  const workspaceFolders = vscode.workspace.workspaceFolders || [];
-  if (workspaceFolders.length === 0) {
+  const repoRoots = discoverWorkspaceRepoRoots();
+  if (repoRoots.length === 0) {
     vscode.window.showInformationMessage?.('Open a Guardex workspace folder to start an agent.');
     return null;
   }
 
-  if (workspaceFolders.length === 1) {
-    return workspaceFolders[0].uri.fsPath;
+  if (repoRoots.length === 1) {
+    return repoRoots[0];
   }
 
-  const picks = workspaceFolders.map((folder) => ({
-    label: path.basename(folder.uri.fsPath),
-    description: folder.uri.fsPath,
-    repoRoot: folder.uri.fsPath,
+  const picks = repoRoots.map((repoRoot) => ({
+    label: repoPickLabel(repoRoot),
+    description: repoRoot,
+    repoRoot,
   }));
   const selection = await vscode.window.showQuickPick?.(picks, {
-    placeHolder: 'Select the Guardex repo where the Start agent launcher should run.',
+    placeHolder: 'Select the Git repo where the Start agent launcher should run.',
   });
   return selection?.repoRoot || null;
 }

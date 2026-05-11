@@ -1861,6 +1861,48 @@ test('active-agents extension startAgent command falls back to gx branch start w
   }
 });
 
+test('active-agents extension startAgent can target a nested Git repo', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-start-agent-nested-'));
+  const storefrontRoot = path.join(tempRoot, 'apps', 'storefront');
+  const backendRoot = path.join(tempRoot, 'apps', 'backend');
+  fs.mkdirSync(path.join(storefrontRoot, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(backendRoot, '.git'), { recursive: true });
+  const { registrations, vscode } = createMockVscode(tempRoot);
+  registrations.quickPickResponse = {
+    label: 'apps/storefront',
+    description: storefrontRoot,
+    repoRoot: storefrontRoot,
+  };
+  registrations.inputResponses.push('nested task', 'codex');
+  const extension = loadExtensionWithMockVscode(vscode);
+  const context = { subscriptions: [] };
+
+  extension.activate(context);
+
+  await registrations.commands.get('gitguardex.activeAgents.startAgent')();
+
+  assert.equal(registrations.quickPickCalls.length, 1);
+  assert.deepEqual(
+    registrations.quickPickCalls[0].items.map((item) => item.repoRoot),
+    [tempRoot, backendRoot, storefrontRoot],
+  );
+  assert.equal(registrations.terminals.length, 1);
+  assert.deepEqual(registrations.terminals[0].options, {
+    name: `GitGuardex: ${path.basename(storefrontRoot)}`,
+    cwd: storefrontRoot,
+  });
+  assert.deepEqual(registrations.terminals[0].sentTexts, [
+    {
+      text: "gx branch start 'nested task' 'codex'",
+      addNewLine: true,
+    },
+  ]);
+
+  for (const subscription of context.subscriptions) {
+    subscription.dispose?.();
+  }
+});
+
 test('active-agents extension groups live sessions under a repo node', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guardex-vscode-live-view-'));
   const sessionPath = writeSessionRecord(tempRoot, sessionSchema.buildSessionRecord({
