@@ -16,6 +16,9 @@ WAIT_FOR_MERGE_RAW="${GUARDEX_FINISH_WAIT_FOR_MERGE:-true}"
 WAIT_TIMEOUT_SECONDS_RAW="${GUARDEX_FINISH_WAIT_TIMEOUT_SECONDS:-1800}"
 WAIT_POLL_SECONDS_RAW="${GUARDEX_FINISH_WAIT_POLL_SECONDS:-10}"
 PARENT_GITLINK_AUTO_COMMIT_RAW="${GUARDEX_FINISH_PARENT_GITLINK_AUTO_COMMIT:-true}"
+AUTO_RESOLVE_MODE_RAW="${GUARDEX_FINISH_AUTO_RESOLVE:-none}"
+AUTO_RESOLVE_SAFE_GLOBS_DEFAULT='.omc/**:.omx/state/**:.dev-ports.json:apps/logs/**:.agents/settings.local.json:.codex/state/**:.claude/state/**'
+AUTO_RESOLVE_SAFE_GLOBS_RAW="${GUARDEX_FINISH_AUTO_RESOLVE_SAFE_GLOBS-$AUTO_RESOLVE_SAFE_GLOBS_DEFAULT}"
 
 run_guardex_cli() {
   if [[ -n "$CLI_ENTRY" ]]; then
@@ -139,9 +142,26 @@ while [[ $# -gt 0 ]]; do
       MERGE_MODE="direct"
       shift
       ;;
+    --auto-resolve)
+      if [[ "${2:-}" =~ ^(none|safe)$ ]]; then
+        AUTO_RESOLVE_MODE_RAW="$2"
+        shift 2
+      else
+        AUTO_RESOLVE_MODE_RAW="safe"
+        shift
+      fi
+      ;;
+    --auto-resolve=*)
+      AUTO_RESOLVE_MODE_RAW="${1#--auto-resolve=}"
+      shift
+      ;;
+    --no-auto-resolve)
+      AUTO_RESOLVE_MODE_RAW="none"
+      shift
+      ;;
     *)
       echo "[agent-branch-finish] Unknown argument: $1" >&2
-      echo "Usage: $0 [--base <branch>] [--branch <branch>] [--no-push] [--cleanup|--no-cleanup] [--wait-for-merge|--no-wait-for-merge] [--wait-timeout-seconds <n>] [--wait-poll-seconds <n>] [--parent-gitlink-commit|--no-parent-gitlink-commit] [--keep-remote-branch|--delete-remote-branch] [--mode auto|direct|pr|--via-pr|--direct-only]" >&2
+      echo "Usage: $0 [--base <branch>] [--branch <branch>] [--no-push] [--cleanup|--no-cleanup] [--wait-for-merge|--no-wait-for-merge] [--wait-timeout-seconds <n>] [--wait-poll-seconds <n>] [--parent-gitlink-commit|--no-parent-gitlink-commit] [--keep-remote-branch|--delete-remote-branch] [--mode auto|direct|pr|--via-pr|--direct-only] [--auto-resolve[=none|safe]|--no-auto-resolve]" >&2
       exit 1
       ;;
   esac
@@ -158,6 +178,43 @@ case "$MERGE_MODE" in
     exit 1
     ;;
 esac
+
+AUTO_RESOLVE_MODE="$(printf '%s' "$AUTO_RESOLVE_MODE_RAW" | tr '[:upper:]' '[:lower:]')"
+case "$AUTO_RESOLVE_MODE" in
+  none|safe) ;;
+  *)
+    echo "[agent-branch-finish] Invalid --auto-resolve value: ${AUTO_RESOLVE_MODE_RAW} (expected none|safe)" >&2
+    exit 1
+    ;;
+esac
+
+path_matches_auto_resolve_safe_glob() {
+  local path="$1"
+  if [[ -z "${AUTO_RESOLVE_SAFE_GLOBS_RAW:-}" ]]; then
+    return 1
+  fi
+  # Read colon-separated globs into an array WITHOUT pathname expansion.
+  local -a globs=()
+  IFS=':' read -ra globs <<< "$AUTO_RESOLVE_SAFE_GLOBS_RAW"
+  local pattern rewritten
+  for pattern in "${globs[@]}"; do
+    [[ -z "$pattern" ]] && continue
+    rewritten="${pattern%/**}"
+    if [[ "$rewritten" != "$pattern" ]]; then
+      # Directory subtree match: <dir>/** matches contents of <dir>, not the directory itself.
+      if [[ "$path" == "$rewritten"/* ]]; then
+        return 0
+      fi
+    else
+      # Exact pattern; bash glob match (no extglob needed for our defaults).
+      # shellcheck disable=SC2053
+      if [[ "$path" == $pattern ]]; then
+        return 0
+      fi
+    fi
+  done
+  return 1
+}
 
 if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
   echo "[agent-branch-finish] Not inside a git repository." >&2
@@ -485,20 +542,73 @@ if git -C "$repo_root" show-ref --verify --quiet "refs/remotes/origin/${BASE_BRA
 
   if ! git -C "$source_worktree" merge --no-commit --no-ff "origin/${BASE_BRANCH}" >/dev/null 2>&1; then
     conflict_files="$(git -C "$source_worktree" diff --name-only --diff-filter=U || true)"
-    git -C "$source_worktree" merge --abort >/dev/null 2>&1 || true
 
-    echo "[agent-branch-finish] Preflight conflict detected between '${SOURCE_BRANCH}' and latest origin/${BASE_BRANCH}." >&2
-    if [[ -n "$conflict_files" ]]; then
-      echo "[agent-branch-finish] Conflicting files:" >&2
-      while IFS= read -r file; do
-        [[ -n "$file" ]] && echo "  - ${file}" >&2
+    if [[ "$AUTO_RESOLVE_MODE" == "safe" && -n "$conflict_files" ]]; then
+      auto_resolve_unresolved=""
+      auto_resolve_resolved=""
+      while IFS= read -r conflict_path; do
+        [[ -z "$conflict_path" ]] && continue
+        if path_matches_auto_resolve_safe_glob "$conflict_path"; then
+          if git -C "$source_worktree" checkout --theirs -- "$conflict_path" >/dev/null 2>&1 \
+            && git -C "$source_worktree" add -- "$conflict_path" >/dev/null 2>&1; then
+            auto_resolve_resolved+="${conflict_path}"$'\n'
+          else
+            auto_resolve_unresolved+="${conflict_path}"$'\n'
+          fi
+        else
+          auto_resolve_unresolved+="${conflict_path}"$'\n'
+        fi
       done <<< "$conflict_files"
-    fi
-    echo "[agent-branch-finish] Rebase/merge '${BASE_BRANCH}' into '${SOURCE_BRANCH}' and resolve conflicts before finishing." >&2
-    exit 1
-  fi
 
-  git -C "$source_worktree" merge --abort >/dev/null 2>&1 || true
+      if [[ -n "$auto_resolve_unresolved" ]]; then
+        git -C "$source_worktree" merge --abort >/dev/null 2>&1 || true
+        echo "[agent-branch-finish] --auto-resolve=safe: some conflicts are outside the safe allowlist; aborting." >&2
+        echo "[agent-branch-finish] Unresolved conflicts:" >&2
+        while IFS= read -r unresolved_path; do
+          [[ -n "$unresolved_path" ]] && echo "  - ${unresolved_path}" >&2
+        done <<< "$auto_resolve_unresolved"
+        echo "[agent-branch-finish] Allowlist (GUARDEX_FINISH_AUTO_RESOLVE_SAFE_GLOBS): ${AUTO_RESOLVE_SAFE_GLOBS_RAW}" >&2
+        exit 1
+      fi
+
+      # Claim the resolved paths on the agent branch so the pre-commit lock check passes.
+      # Without this, the auto-resolve commit would be rejected because the agent never
+      # explicitly claimed these files (they leaked from the base via prior auto-transfer).
+      auto_resolve_claim_paths=()
+      while IFS= read -r resolved_path; do
+        [[ -n "$resolved_path" ]] && auto_resolve_claim_paths+=("$resolved_path")
+      done <<< "$auto_resolve_resolved"
+      if [[ "${#auto_resolve_claim_paths[@]}" -gt 0 ]]; then
+        run_guardex_cli locks claim --branch "$SOURCE_BRANCH" "${auto_resolve_claim_paths[@]}" >/dev/null 2>&1 || true
+      fi
+
+      auto_resolve_commit_msg="Merge origin/${BASE_BRANCH} into ${SOURCE_BRANCH} (gx --auto-resolve=safe; state files resolved to base)"
+      if ! git -C "$source_worktree" commit -m "$auto_resolve_commit_msg" >/dev/null 2>&1; then
+        git -C "$source_worktree" merge --abort >/dev/null 2>&1 || true
+        echo "[agent-branch-finish] --auto-resolve=safe: failed to commit resolved merge (pre-commit hook may have rejected it; verify file locks)." >&2
+        exit 1
+      fi
+      echo "[agent-branch-finish] --auto-resolve=safe: resolved $(printf '%s' "$auto_resolve_resolved" | grep -c '^[^[:space:]]') state-file conflict(s) with --theirs (base wins):" >&2
+      while IFS= read -r resolved_path; do
+        [[ -n "$resolved_path" ]] && echo "  - ${resolved_path}" >&2
+      done <<< "$auto_resolve_resolved"
+    else
+      git -C "$source_worktree" merge --abort >/dev/null 2>&1 || true
+
+      echo "[agent-branch-finish] Preflight conflict detected between '${SOURCE_BRANCH}' and latest origin/${BASE_BRANCH}." >&2
+      if [[ -n "$conflict_files" ]]; then
+        echo "[agent-branch-finish] Conflicting files:" >&2
+        while IFS= read -r file; do
+          [[ -n "$file" ]] && echo "  - ${file}" >&2
+        done <<< "$conflict_files"
+      fi
+      echo "[agent-branch-finish] Rebase/merge '${BASE_BRANCH}' into '${SOURCE_BRANCH}' and resolve conflicts before finishing." >&2
+      echo "[agent-branch-finish] Or rerun with --auto-resolve=safe to auto-resolve state-file conflicts against the base." >&2
+      exit 1
+    fi
+  else
+    git -C "$source_worktree" merge --abort >/dev/null 2>&1 || true
+  fi
 fi
 
 should_create_integration_helper=1
