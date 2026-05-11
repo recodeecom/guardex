@@ -382,6 +382,7 @@ merge_completed=0
 merge_status="pr"
 direct_push_error=""
 pr_url=""
+changed_submodule_push_done=0
 
 cleanup() {
   if [[ -n "$integration_worktree" && -d "$integration_worktree" ]]; then
@@ -718,6 +719,77 @@ maybe_auto_commit_parent_gitlink() {
   echo "[agent-branch-finish] Parent gitlink auto-committed '${subrepo_rel}' in ${super_root}."
 }
 
+maybe_push_changed_submodule_branches() {
+  local base_ref="${1:-}"
+  local source_ref="${2:-}"
+  local changed_path=""
+  local gitlink_mode=""
+  local gitlink_sha=""
+  local submodule_dir=""
+  local branch_name=""
+  local candidate_branch=""
+  local remote_name=""
+  local push_output=""
+
+  if [[ "$PUSH_ENABLED" -ne 1 || "$changed_submodule_push_done" -eq 1 ]]; then
+    return 0
+  fi
+  changed_submodule_push_done=1
+  if [[ -z "$base_ref" || -z "$source_ref" ]]; then
+    return 0
+  fi
+
+  while IFS= read -r changed_path; do
+    [[ -n "$changed_path" ]] || continue
+
+    gitlink_mode="$(git -C "$source_worktree" ls-tree "$source_ref" -- "$changed_path" | awk 'NR == 1 { print $1 }')"
+    if [[ "$gitlink_mode" != "160000" ]]; then
+      continue
+    fi
+    gitlink_sha="$(git -C "$source_worktree" ls-tree "$source_ref" -- "$changed_path" | awk 'NR == 1 { print $3 }')"
+    if [[ -z "$gitlink_sha" ]]; then
+      continue
+    fi
+
+    submodule_dir="${source_worktree}/${changed_path}"
+    if ! git -C "$submodule_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+      echo "[agent-branch-finish] Warning: changed gitlink '${changed_path}' has no checked-out submodule at ${submodule_dir}; cannot auto-push submodule commit ${gitlink_sha}." >&2
+      return 1
+    fi
+    if ! git -C "$submodule_dir" cat-file -e "${gitlink_sha}^{commit}" >/dev/null 2>&1; then
+      echo "[agent-branch-finish] Warning: changed gitlink '${changed_path}' points at ${gitlink_sha}, but that commit is not present in ${submodule_dir}; cannot auto-push it." >&2
+      return 1
+    fi
+
+    branch_name="$(git -C "$submodule_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
+    if [[ -z "$branch_name" || "$branch_name" == "HEAD" ]] || ! git -C "$submodule_dir" merge-base --is-ancestor "$gitlink_sha" "$branch_name" >/dev/null 2>&1; then
+      candidate_branch="$(git -C "$submodule_dir" for-each-ref --contains "$gitlink_sha" --format='%(refname:short)' refs/heads | head -n 1)"
+      branch_name="$candidate_branch"
+    fi
+    if [[ -z "$branch_name" || "$branch_name" == "HEAD" ]]; then
+      echo "[agent-branch-finish] Warning: changed gitlink '${changed_path}' points at ${gitlink_sha}, but no local submodule branch contains it; cannot choose a safe remote branch to push." >&2
+      return 1
+    fi
+
+    remote_name="$(git -C "$submodule_dir" config --get "branch.${branch_name}.remote" || true)"
+    if [[ -z "$remote_name" ]]; then
+      remote_name="origin"
+    fi
+    if ! git -C "$submodule_dir" remote get-url "$remote_name" >/dev/null 2>&1; then
+      echo "[agent-branch-finish] Warning: changed gitlink '${changed_path}' branch '${branch_name}' has no usable remote '${remote_name}'; cannot auto-push submodule commit ${gitlink_sha}." >&2
+      return 1
+    fi
+
+    if push_output="$(git -C "$submodule_dir" push -u "$remote_name" "${branch_name}:${branch_name}" 2>&1)"; then
+      echo "[agent-branch-finish] Pushed changed submodule '${changed_path}' branch '${branch_name}' to '${remote_name}' before parent finish."
+    else
+      echo "[agent-branch-finish] Changed submodule '${changed_path}' must be pushed before the parent branch can be finished." >&2
+      [[ -n "$push_output" ]] && echo "$push_output" >&2
+      return 1
+    fi
+  done < <(git -C "$source_worktree" diff --name-only "$base_ref" "$source_ref" -- 2>/dev/null || true)
+}
+
 wait_for_pr_merge() {
   local deadline
   deadline=$(( $(date +%s) + WAIT_TIMEOUT_SECONDS ))
@@ -788,6 +860,7 @@ run_pr_flow() {
     return 0
   fi
 
+  maybe_push_changed_submodule_branches "$start_ref" "$SOURCE_BRANCH"
   git -C "$source_worktree" push -u origin "$SOURCE_BRANCH"
 
   pr_title="$(git -C "$repo_root" log -1 --pretty=%s "$SOURCE_BRANCH" 2>/dev/null || true)"
@@ -836,6 +909,7 @@ run_pr_flow() {
 
 if [[ "$PUSH_ENABLED" -eq 1 ]]; then
   if [[ "$MERGE_MODE" != "pr" ]]; then
+    maybe_push_changed_submodule_branches "$start_ref" "$SOURCE_BRANCH"
     if ! direct_push_output="$(git -C "$integration_worktree" push origin "HEAD:${BASE_BRANCH}" 2>&1)"; then
       direct_push_error="$direct_push_output"
       merge_completed=0

@@ -231,6 +231,70 @@ test('agent-branch-finish auto-commits parent gitlink after nested repo finish',
   assert.equal(parentStatus.stdout.trim(), '', 'parent gitlink should be committed cleanly');
 });
 
+test('agent-branch-finish pushes changed submodule branch before parent finish', () => {
+  const parentDir = initRepoOnBranch('main');
+  seedCommit(parentDir);
+  attachOriginRemoteForBranch(parentDir, 'main');
+
+  const childDir = path.join(parentDir, 'apps', 'storefront');
+  fs.mkdirSync(childDir, { recursive: true });
+  let result = runCmd('git', ['init', '-b', 'main'], childDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  configureGitIdentity(childDir);
+  fs.writeFileSync(path.join(childDir, 'app.css'), '@tailwind utilities;\n', 'utf8');
+  seedCommit(childDir);
+  const childOrigin = attachOriginRemoteForBranch(childDir, 'main');
+  result = runCmd('git', ['push', 'origin', 'main'], childDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const childMainCommit = runCmd('git', ['rev-parse', 'HEAD'], childDir).stdout.trim();
+
+  result = runCmd('git', ['update-index', '--add', '--cacheinfo', '160000', childMainCommit, 'apps/storefront'], parentDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['commit', '-m', 'track storefront submodule'], parentDir, {
+    ALLOW_COMMIT_ON_PROTECTED_BRANCH: '1',
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['push', 'origin', 'main'], parentDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  const childBranch = 'agent/codex/fix-css-import-order-2026-05-11';
+  result = runCmd('git', ['checkout', '-b', childBranch], childDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  fs.writeFileSync(path.join(childDir, 'app.css'), '@import url("https://fonts.example/test.css");\n@tailwind utilities;\n', 'utf8');
+  result = runCmd('git', ['add', 'app.css'], childDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['commit', '-m', 'Keep font imports ahead of Tailwind output'], childDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const childCommit = runCmd('git', ['rev-parse', 'HEAD'], childDir).stdout.trim();
+
+  const parentBranch = 'agent/codex/point-storefront-css-fix';
+  result = runCmd('git', ['checkout', '-b', parentBranch], parentDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['update-index', '--cacheinfo', '160000', childCommit, 'apps/storefront'], parentDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  result = runCmd('git', ['commit', '-m', 'Point storefront at CSS import-order fix'], parentDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+
+  result = runBranchFinish([
+    '--branch',
+    parentBranch,
+    '--base',
+    'main',
+    '--direct-only',
+    '--no-cleanup',
+  ], parentDir);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /Pushed changed submodule 'apps\/storefront' branch 'agent\/codex\/fix-css-import-order-2026-05-11' to 'origin' before parent finish/);
+
+  const remoteChildHead = runCmd('git', ['ls-remote', childOrigin, `refs/heads/${childBranch}`], parentDir);
+  assert.equal(remoteChildHead.status, 0, remoteChildHead.stderr || remoteChildHead.stdout);
+  assert.match(remoteChildHead.stdout.trim(), new RegExp(`^${childCommit}\\s+refs/heads/${escapeRegexLiteral(childBranch)}$`));
+
+  const parentMainGitlink = runCmd('git', ['ls-tree', 'origin/main', '--', 'apps/storefront'], parentDir);
+  assert.equal(parentMainGitlink.status, 0, parentMainGitlink.stderr || parentMainGitlink.stdout);
+  assert.match(parentMainGitlink.stdout, new RegExp(`160000 commit ${childCommit}\\s+apps/storefront`));
+});
+
 
 test('agent-branch-finish auto-syncs source branch when behind origin/dev', () => {
   const repoDir = initRepo();
