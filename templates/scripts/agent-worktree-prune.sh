@@ -249,11 +249,71 @@ branch_has_worktree() {
   git -C "$repo_root" worktree list --porcelain | grep -q "^branch refs/heads/${branch}$"
 }
 
+# Globs treated as agent state, not real work. Worktrees whose only "dirty"
+# content matches these are considered clean for prune purposes. Mirrors the
+# auto-transfer + auto-resolve allowlist from PRs #546/#547 (state-file globs
+# never carry authoritative content out of an agent branch).
+WORKTREE_STATE_EXCLUDE_GLOBS_DEFAULT='.omc/**:.omx/state/**:.dev-ports.json:apps/logs/**:.agents/settings.local.json:.codex/state/**:.claude/state/**'
+WORKTREE_STATE_EXCLUDE_GLOBS_RAW="${GUARDEX_PRUNE_STATE_EXCLUDE_GLOBS-$WORKTREE_STATE_EXCLUDE_GLOBS_DEFAULT}"
+
+build_state_exclude_pathspec_args() {
+  # Emit one ':(exclude,glob)<pat>' arg per non-empty pattern.
+  if [[ -z "$WORKTREE_STATE_EXCLUDE_GLOBS_RAW" ]]; then
+    return 0
+  fi
+  local -a globs=()
+  IFS=':' read -ra globs <<< "$WORKTREE_STATE_EXCLUDE_GLOBS_RAW"
+  local pattern
+  for pattern in "${globs[@]}"; do
+    [[ -z "$pattern" ]] && continue
+    printf '%s\0' ":(exclude,glob)${pattern}"
+  done
+}
+
+# Capture the state-exclude pathspecs once; reused by is_clean_worktree and
+# the dirt-summary logger below.
+STATE_EXCLUDE_PATHSPEC_ARGS=()
+while IFS= read -r -d '' arg; do
+  STATE_EXCLUDE_PATHSPEC_ARGS+=("$arg")
+done < <(build_state_exclude_pathspec_args)
+
 is_clean_worktree() {
   local wt="$1"
-  git -C "$wt" diff --quiet -- . ":(exclude).omx/state/agent-file-locks.json" \
-    && git -C "$wt" diff --cached --quiet -- . ":(exclude).omx/state/agent-file-locks.json" \
-    && [[ -z "$(git -C "$wt" ls-files --others --exclude-standard)" ]]
+  git -C "$wt" diff --quiet -- . "${STATE_EXCLUDE_PATHSPEC_ARGS[@]}" \
+    && git -C "$wt" diff --cached --quiet -- . "${STATE_EXCLUDE_PATHSPEC_ARGS[@]}" \
+    && [[ -z "$(git -C "$wt" ls-files --others --exclude-standard -- . "${STATE_EXCLUDE_PATHSPEC_ARGS[@]}")" ]]
+}
+
+# Returns a short, human-readable summary of why a worktree is considered dirty:
+# up to 3 modified-tracked paths + up to 3 untracked paths + a "(+N more)" tail.
+# Used to surface actionable context next to "Skipping dirty worktree" log lines
+# (previously gave no clue what was actually dirty).
+summarize_worktree_dirt() {
+  local wt="$1"
+  local modified_paths untracked_paths
+  modified_paths="$(git -C "$wt" diff --name-only --diff-filter=AMDR -- . "${STATE_EXCLUDE_PATHSPEC_ARGS[@]}" 2>/dev/null | head -3)"
+  local modified_count
+  modified_count="$(git -C "$wt" diff --name-only --diff-filter=AMDR -- . "${STATE_EXCLUDE_PATHSPEC_ARGS[@]}" 2>/dev/null | wc -l | tr -d ' ')"
+  untracked_paths="$(git -C "$wt" ls-files --others --exclude-standard -- . "${STATE_EXCLUDE_PATHSPEC_ARGS[@]}" 2>/dev/null | head -3)"
+  local untracked_count
+  untracked_count="$(git -C "$wt" ls-files --others --exclude-standard -- . "${STATE_EXCLUDE_PATHSPEC_ARGS[@]}" 2>/dev/null | wc -l | tr -d ' ')"
+
+  if [[ -n "$modified_paths" ]]; then
+    while IFS= read -r p; do
+      [[ -n "$p" ]] && echo "    modified: ${p}"
+    done <<< "$modified_paths"
+    if [[ "$modified_count" -gt 3 ]]; then
+      echo "    modified: (+$((modified_count - 3)) more)"
+    fi
+  fi
+  if [[ -n "$untracked_paths" ]]; then
+    while IFS= read -r p; do
+      [[ -n "$p" ]] && echo "    untracked: ${p}"
+    done <<< "$untracked_paths"
+    if [[ "$untracked_count" -gt 3 ]]; then
+      echo "    untracked: (+$((untracked_count - 3)) more)"
+    fi
+  fi
 }
 
 resolve_worktree_common_dir() {
@@ -482,6 +542,7 @@ process_entry() {
   if [[ "$FORCE_DIRTY" -ne 1 ]] && ! is_clean_worktree "$wt"; then
     skipped_dirty=$((skipped_dirty + 1))
     echo "[agent-worktree-prune] Skipping dirty worktree (${remove_reason}): ${wt}"
+    summarize_worktree_dirt "$wt"
     return
   fi
 
