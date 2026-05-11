@@ -89,6 +89,7 @@ const {
   readConfiguredProtectedBranches,
   readProtectedBranches,
   ensureSetupProtectedBranches,
+  ensureSubmoduleAutoSync,
   writeProtectedBranches,
   readGitConfig,
   resolveBaseBranch,
@@ -382,6 +383,9 @@ function runSetupBootstrapInternal(options) {
   const installPayload = runInstallInternal(options);
   installPayload.operations.push(
     ensureSetupProtectedBranches(installPayload.repoRoot, Boolean(options.dryRun)),
+  );
+  installPayload.operations.push(
+    ...ensureSubmoduleAutoSync(installPayload.repoRoot, Boolean(options.dryRun)),
   );
 
   let parentWorkspace = null;

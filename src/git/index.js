@@ -319,6 +319,70 @@ function writeProtectedBranches(repoRoot, branches) {
   gitRun(repoRoot, ['config', GIT_PROTECTED_BRANCHES_KEY, branches.join(' ')]);
 }
 
+const SUBMODULE_AUTO_SYNC_CONFIGS = [
+  {
+    key: 'pull.recurseSubmodules',
+    value: 'true',
+    note: 'auto-update submodule working dirs on `git pull`',
+  },
+  {
+    key: 'fetch.recurseSubmodules',
+    value: 'on-demand',
+    note: 'fetch submodule commits as parent pointers move',
+  },
+];
+
+function ensureSubmoduleAutoSync(repoRoot, dryRun) {
+  const gitmodulesPath = path.join(repoRoot, '.gitmodules');
+  if (!fs.existsSync(gitmodulesPath)) {
+    return [];
+  }
+
+  const operations = [];
+  for (const { key, value, note } of SUBMODULE_AUTO_SYNC_CONFIGS) {
+    const existing = readGitConfig(repoRoot, key);
+    if (existing) {
+      operations.push({
+        status: 'unchanged',
+        file: `git config ${key}`,
+        note: `respected pre-existing value: ${existing}`,
+      });
+      continue;
+    }
+    if (!dryRun) {
+      gitRun(repoRoot, ['config', key, value]);
+    }
+    operations.push({
+      status: dryRun ? 'would-set' : 'set',
+      file: `git config ${key}`,
+      note: `${value} (${note})`,
+    });
+  }
+
+  if (dryRun) {
+    operations.push({
+      status: 'would-sync',
+      file: 'git submodule update --init --recursive',
+      note: 'snap submodule working dirs to parent index',
+    });
+    return operations;
+  }
+
+  const result = gitRun(
+    repoRoot,
+    ['submodule', 'update', '--init', '--recursive'],
+    { allowFailure: true },
+  );
+  operations.push({
+    status: result.status === 0 ? 'synced' : 'failed',
+    file: 'git submodule update --init --recursive',
+    note: result.status === 0
+      ? 'submodule working dirs snapped to parent index'
+      : `failed: ${(result.stderr || '').trim().split('\n')[0] || 'unknown'}`,
+  });
+  return operations;
+}
+
 function readGitConfig(repoRoot, key) {
   const result = gitRun(repoRoot, ['config', '--get', key], { allowFailure: true });
   if (result.status !== 0) {
@@ -697,6 +761,7 @@ module.exports = {
   hasSignificantWorkingTreeChanges,
   readProtectedBranches,
   ensureSetupProtectedBranches,
+  ensureSubmoduleAutoSync,
   writeProtectedBranches,
   readGitConfig,
   resolveBaseBranch,
