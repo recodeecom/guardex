@@ -166,6 +166,7 @@ function toDestinationPath(relativeTemplatePath) {
 // safety block (auto-managed by syncManagedGitignoreLines below).
 const TEMPLATE_FILES = [
   'scripts/agent-session-state.js',
+  'scripts/agent-preflight.sh',
   'scripts/guardex-docker-loader.sh',
   'scripts/guardex-env.sh',
   'scripts/install-vscode-active-agents-extension.js',

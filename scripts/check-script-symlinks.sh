@@ -18,6 +18,7 @@ required_symlinks=(
   scripts/agent-branch-finish.sh
   scripts/agent-branch-merge.sh
   scripts/agent-file-locks.py
+  scripts/agent-preflight.sh
   scripts/agent-worktree-prune.sh
   scripts/codex-agent.sh
   scripts/install-agent-git-hooks.sh

@@ -19,6 +19,9 @@ PARENT_GITLINK_AUTO_COMMIT_RAW="${GUARDEX_FINISH_PARENT_GITLINK_AUTO_COMMIT:-tru
 AUTO_RESOLVE_MODE_RAW="${GUARDEX_FINISH_AUTO_RESOLVE:-none}"
 AUTO_RESOLVE_SAFE_GLOBS_DEFAULT='.omc/**:.omx/state/**:.dev-ports.json:apps/logs/**:.agents/settings.local.json:.codex/state/**:.claude/state/**'
 AUTO_RESOLVE_SAFE_GLOBS_RAW="${GUARDEX_FINISH_AUTO_RESOLVE_SAFE_GLOBS-$AUTO_RESOLVE_SAFE_GLOBS_DEFAULT}"
+PREFLIGHT_ENABLED_RAW="${GUARDEX_FINISH_PREFLIGHT:-true}"
+PREFLIGHT_SCRIPT_RAW="${GUARDEX_FINISH_PREFLIGHT_SCRIPT:-scripts/agent-preflight.sh}"
+AUTO_PROMOTE_DRAFT_RAW="${GUARDEX_FINISH_AUTO_PROMOTE:-true}"
 
 run_guardex_cli() {
   if [[ -n "$CLI_ENTRY" ]]; then
@@ -67,11 +70,83 @@ normalize_int() {
   printf '%s' "$value"
 }
 
+# Resolve the pre-flight script path against the source worktree. The
+# caller passes either the configured path (which may be relative) or
+# an empty string; we return the absolute path if it exists and is
+# executable, otherwise return empty.
+resolve_preflight_script() {
+  local worktree="$1"
+  local configured="$2"
+  if [[ -z "$configured" ]]; then
+    configured="scripts/agent-preflight.sh"
+  fi
+  if [[ "$configured" = /* ]]; then
+    if [[ -x "$configured" ]]; then
+      printf '%s' "$configured"
+    fi
+    return 0
+  fi
+  local candidate="${worktree}/${configured}"
+  if [[ -x "$candidate" ]]; then
+    printf '%s' "$candidate"
+  fi
+}
+
+# Run the pre-flight verification gate in the agent worktree before
+# any push happens. Returns 0 on success or when no gate is
+# configured; returns non-zero (and prints a hint) on failure, which
+# the caller propagates so the push is refused.
+run_preflight() {
+  local worktree="$1"
+  if [[ "$PREFLIGHT_ENABLED" -ne 1 ]]; then
+    return 0
+  fi
+  local script_path
+  script_path="$(resolve_preflight_script "$worktree" "$PREFLIGHT_SCRIPT_RAW")"
+  if [[ -z "$script_path" ]]; then
+    echo "[agent-branch-finish] No executable pre-flight script at ${PREFLIGHT_SCRIPT_RAW} (in ${worktree}); skipping pre-flight." >&2
+    return 0
+  fi
+  echo "[agent-branch-finish] Running pre-flight: ${script_path}" >&2
+  if ( cd "$worktree" && "$script_path" ); then
+    echo "[agent-branch-finish] Pre-flight passed." >&2
+    return 0
+  fi
+  echo "[agent-branch-finish] Pre-flight FAILED; refusing push. Override with --no-preflight if you really mean it." >&2
+  return 1
+}
+
+# After a PR exists, if it is in draft and auto-promote is enabled,
+# mark it ready-for-review. With the budget-friendly CI defaults
+# (draft PRs skip CI), this is the moment when CI is allowed to fire.
+maybe_auto_promote_pr() {
+  local pr_url="$1"
+  if [[ -z "$pr_url" ]] || [[ "$AUTO_PROMOTE_DRAFT" -ne 1 ]]; then
+    return 0
+  fi
+  if ! command -v "$GH_BIN" >/dev/null 2>&1; then
+    return 0
+  fi
+  local is_draft
+  is_draft="$("$GH_BIN" pr view "$pr_url" --json isDraft --jq '.isDraft' 2>/dev/null || true)"
+  if [[ "$is_draft" != "true" ]]; then
+    return 0
+  fi
+  echo "[agent-branch-finish] PR is draft; promoting to ready-for-review (pre-flight passed)." >&2
+  if "$GH_BIN" pr ready "$pr_url" >/dev/null 2>&1; then
+    echo "[agent-branch-finish] PR marked ready-for-review." >&2
+  else
+    echo "[agent-branch-finish] gh pr ready failed; PR left in draft. Promote manually if intended." >&2
+  fi
+}
+
 CLEANUP_AFTER_MERGE="$(normalize_bool "$CLEANUP_AFTER_MERGE_RAW" "1")"
 WAIT_FOR_MERGE="$(normalize_bool "$WAIT_FOR_MERGE_RAW" "1")"
 WAIT_TIMEOUT_SECONDS="$(normalize_int "$WAIT_TIMEOUT_SECONDS_RAW" "1800" "30")"
 WAIT_POLL_SECONDS="$(normalize_int "$WAIT_POLL_SECONDS_RAW" "10" "0")"
 PARENT_GITLINK_AUTO_COMMIT="$(normalize_bool "$PARENT_GITLINK_AUTO_COMMIT_RAW" "1")"
+PREFLIGHT_ENABLED="$(normalize_bool "$PREFLIGHT_ENABLED_RAW" "1")"
+AUTO_PROMOTE_DRAFT="$(normalize_bool "$AUTO_PROMOTE_DRAFT_RAW" "1")"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -159,9 +234,29 @@ while [[ $# -gt 0 ]]; do
       AUTO_RESOLVE_MODE_RAW="none"
       shift
       ;;
+    --no-preflight)
+      PREFLIGHT_ENABLED_RAW="false"
+      shift
+      ;;
+    --preflight)
+      PREFLIGHT_ENABLED_RAW="true"
+      shift
+      ;;
+    --preflight-script)
+      PREFLIGHT_SCRIPT_RAW="${2:-}"
+      shift 2
+      ;;
+    --no-auto-promote)
+      AUTO_PROMOTE_DRAFT_RAW="false"
+      shift
+      ;;
+    --auto-promote)
+      AUTO_PROMOTE_DRAFT_RAW="true"
+      shift
+      ;;
     *)
       echo "[agent-branch-finish] Unknown argument: $1" >&2
-      echo "Usage: $0 [--base <branch>] [--branch <branch>] [--no-push] [--cleanup|--no-cleanup] [--wait-for-merge|--no-wait-for-merge] [--wait-timeout-seconds <n>] [--wait-poll-seconds <n>] [--parent-gitlink-commit|--no-parent-gitlink-commit] [--keep-remote-branch|--delete-remote-branch] [--mode auto|direct|pr|--via-pr|--direct-only] [--auto-resolve[=none|safe|full]|--no-auto-resolve]" >&2
+      echo "Usage: $0 [--base <branch>] [--branch <branch>] [--no-push] [--cleanup|--no-cleanup] [--wait-for-merge|--no-wait-for-merge] [--wait-timeout-seconds <n>] [--wait-poll-seconds <n>] [--parent-gitlink-commit|--no-parent-gitlink-commit] [--keep-remote-branch|--delete-remote-branch] [--mode auto|direct|pr|--via-pr|--direct-only] [--auto-resolve[=none|safe|full]|--no-auto-resolve] [--no-preflight|--preflight] [--preflight-script <path>] [--no-auto-promote|--auto-promote]" >&2
       exit 1
       ;;
   esac
@@ -1155,6 +1250,10 @@ run_pr_flow() {
   fi
   echo "[agent-branch-finish] PR URL: ${pr_url}" >&2
 
+  # Pre-flight already passed by the time we reach the PR; promote any
+  # existing draft so the budget-friendly CI gate fires once.
+  maybe_auto_promote_pr "$pr_url"
+
   merge_output=""
   if merge_output="$("$GH_BIN" pr merge "$SOURCE_BRANCH" --squash --delete-branch 2>&1)"; then
     return 0
@@ -1186,6 +1285,9 @@ run_pr_flow() {
 }
 
 if [[ "$PUSH_ENABLED" -eq 1 ]]; then
+  if ! run_preflight "$source_worktree"; then
+    exit 1
+  fi
   if [[ "$MERGE_MODE" != "pr" ]]; then
     maybe_push_changed_submodule_branches "$start_ref" "$SOURCE_BRANCH"
     if ! direct_push_output="$(git -C "$integration_worktree" push origin "HEAD:${BASE_BRANCH}" 2>&1)"; then
