@@ -44,11 +44,76 @@ test('renderCockpit returns a readable terminal string', () => {
   assert.match(output, /repo: \/repo\/example/);
   assert.match(output, /base: main/);
   assert.match(output, /active sessions: 1/);
+  assert.match(output, /summary: working=1 thinking=0 blocked=0 done=0 stale=0/);
+  assert.match(output, /WORKING NOW \(1\)/);
+  assert.match(output, /progress: Spec ok \| Code active \| Tests todo \| PR todo \| Merge todo \| Cleanup todo/);
   assert.match(output, /branch: agent\/codex\/example/);
   assert.match(output, /worktree: \/repo\/example\/\.omx\/agent-worktrees\/example \(present\)/);
   assert.match(output, /locks: 4 \(src\/cockpit\/render\.js, src\/cockpit\/state\.js, test\/cockpit-render\.test\.js, \+1 more\)/);
   assert.match(output, /task: implement cockpit/);
   assert.match(output, /colony: colony\.plan=queen-plan colony\.subtask=1/);
+});
+
+test('renderCockpit groups sessions into fleet buckets', () => {
+  const output = renderCockpit({
+    repoPath: '/repo/example',
+    baseBranch: 'main',
+    sessions: [
+      {
+        agentName: 'codex',
+        branch: 'agent/codex/working',
+        worktreePath: '/repo/example/.omx/agent-worktrees/working',
+        worktreeExists: true,
+        status: 'working',
+        task: 'implement UI',
+        changedFiles: ['src/cockpit/render.js'],
+      },
+      {
+        agentName: 'claude',
+        branch: 'agent/claude/pending',
+        worktreePath: '/repo/example/.omx/agent-worktrees/pending',
+        worktreeExists: true,
+        status: 'thinking',
+        task: 'review spec',
+      },
+      {
+        agentName: 'codex',
+        branch: 'agent/codex/blocked',
+        worktreePath: '/repo/example/.omx/agent-worktrees/blocked',
+        worktreeExists: true,
+        status: 'blocked',
+        task: 'fix test',
+      },
+      {
+        agentName: 'codex',
+        branch: 'agent/codex/merged',
+        worktreePath: '/repo/example/.omx/agent-worktrees/merged',
+        worktreeExists: true,
+        status: 'complete',
+        prState: 'MERGED',
+        prUrl: 'https://github.com/example/repo/pull/1',
+      },
+      {
+        agentName: 'codex',
+        branch: 'agent/codex/stale',
+        worktreePath: '/repo/example/.omx/agent-worktrees/stale',
+        worktreeExists: false,
+        status: 'working',
+      },
+    ],
+  });
+
+  assert.match(output, /summary: working=1 thinking=1 blocked=1 done=1 stale=1/);
+  assert.match(output, /WORKING NOW \(1\)/);
+  assert.match(output, /THINKING \(1\)/);
+  assert.match(output, /BLOCKED \(1\)/);
+  assert.match(output, /DONE \(1\)/);
+  assert.match(output, /STALE \(1\)/);
+  assert.match(output, /codex \| CHANGED \| working/);
+  assert.match(output, /codex \| MERGED \| complete/);
+  assert.match(output, /codex \| STALE \| working/);
+  assert.match(output, /changed: 1 \(src\/cockpit\/render\.js\)/);
+  assert.match(output, /detail: selected lane shows branch, progress, claims, changed files, PR, heartbeat, and Colony metadata\./);
 });
 
 test('agents status payload and cockpit state see the same session', () => {
