@@ -32,7 +32,11 @@ test('release workflow publishes with provenance in CI', () => {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   assert.match(workflow, /name:\s+Checkout\s+uses:\s+actions\/checkout@[0-9a-f]{40}[^\n]*\n\s+with:\s*\n\s+fetch-depth:\s+0/s);
   assert.match(workflow, /npm publish --provenance --access public/);
-  assert.match(workflow, /name:\s+Install Cosign\s+uses:\s+sigstore\/cosign-installer@[0-9a-f]{40}[^\n]*# v4\.1\.1/s);
+  // Cosign installer must be pinned to a 40-char SHA on the v4.1.x line.
+  // The patch version floats so a renovate/dependabot bump
+  // (e.g. v4.1.1 -> v4.1.2) doesn't break this gate; a major or minor
+  // bump still does.
+  assert.match(workflow, /name:\s+Install Cosign\s+uses:\s+sigstore\/cosign-installer@[0-9a-f]{40}[^\n]*# v4\.1\.\d+/s);
 });
 
 test('release workflow skips publish when the current version is already on npm', () => {
@@ -108,11 +112,19 @@ test('README advertises the repo skills installer path and root skills stay in s
   }
 });
 
-test('README keeps canonical About copy and problem-solution visuals aligned', () => {
-  const readme = fs.readFileSync(readmePath, 'utf8');
+test('package description stays aligned with about_description.txt', () => {
+  // The README "Package summary" paragraph and link to about_description.txt
+  // were intentionally removed in PR #564 to declutter the top of the file;
+  // this test no longer enforces their presence. What still matters: the npm
+  // package description and the standalone about_description.txt file are the
+  // canonical About copy and must not drift apart.
   const aboutDescription = fs.readFileSync(aboutDescriptionPath, 'utf8').trim();
   const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));
+  assert.equal(pkg.description, aboutDescription);
+});
 
+test('README keeps the problem-solution visuals aligned', () => {
+  const readme = fs.readFileSync(readmePath, 'utf8');
   assert.match(
     readme,
     /## The problem\s+!\[Parallel agents colliding in the same files\]\(https:\/\/raw\.githubusercontent\.com\/recodeee\/gitguardex\/main\/docs\/images\/problem-agent-collision\.svg\)/s,
@@ -121,9 +133,6 @@ test('README keeps canonical About copy and problem-solution visuals aligned', (
     readme,
     /### Solution\s+!\[Agent branch\/worktree start protocol\]\(https:\/\/raw\.githubusercontent\.com\/recodeee\/gitguardex\/main\/docs\/images\/workflow-branch-start\.svg\)/s,
   );
-  assert.match(readme, /\[about_description\.txt\]\(\.\/about_description\.txt\)/);
-  assert.match(readme, new RegExp(escapeRegexLiteral(aboutDescription)));
-  assert.equal(pkg.description, aboutDescription);
 });
 
 test('security workflows are present and use pinned GitHub Actions SHAs', () => {
@@ -143,11 +152,25 @@ test('security workflows are present and use pinned GitHub Actions SHAs', () => 
   }
 });
 
-test('CI and CodeQL workflows run on pull requests targeting main', () => {
+test('CI workflow runs on pull requests targeting main', () => {
   const ciWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
-  const codeqlWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'codeql.yml'), 'utf8');
   assert.match(ciWorkflow, /pull_request:\s*\n\s*branches:\s*\n\s*-\s*main/s);
-  assert.match(codeqlWorkflow, /pull_request:\s*\n\s*branches:\s*\n\s*-\s*main/s);
+});
+
+test('CodeQL workflow runs on a weekly schedule, not per-PR', () => {
+  // PR #571 dropped per-PR / per-push triggers from codeql.yml as part of
+  // the budget-friendly trim. CodeQL is the single most expensive workflow
+  // per run on this repo, and the weekly schedule + `workflow_dispatch`
+  // covers security coverage without compounding the monthly Actions bill
+  // across every agent PR. Re-add a `pull_request:` trigger here only if
+  // your project specifically needs per-PR CodeQL gating for compliance.
+  const codeqlWorkflow = fs.readFileSync(
+    path.join(repoRoot, '.github', 'workflows', 'codeql.yml'),
+    'utf8',
+  );
+  assert.match(codeqlWorkflow, /schedule:\s*\n\s*-\s*cron:/s);
+  assert.match(codeqlWorkflow, /workflow_dispatch:/);
+  assert.doesNotMatch(codeqlWorkflow, /\n\s*pull_request:\s*\n/s);
 });
 
 test('code review workflow does not gate startup on secrets context', () => {

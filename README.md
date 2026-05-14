@@ -308,6 +308,32 @@ Being honest about where this still has issues:
 <details open>
 <summary><strong>v7.x</strong></summary>
 
+### v7.0.43
+- Budget-friendly CI defaults for gitguardex-managed projects: live
+  workflows drop `push: main`, gate per-PR jobs on `pull_request.draft
+  == false`, add `concurrency: cancel-in-progress`, and split per-runtime
+  matrix coverage into a weekly `ci-full.yml`. CodeQL and Scorecard run
+  on the weekly schedule + `workflow_dispatch` only. Templates under
+  `templates/github/workflows/` carry the same posture so downstream
+  projects inherit it via `gx setup`.
+- New `gx ci-init` subcommand scaffolds `ci.yml`, `ci-full.yml`, `cr.yml`,
+  and a `README.md` budget-posture guide into a target repo's
+  `.github/workflows/` directory. Supports `--target`, `--dry-run`,
+  `--force`, `--no-stage`, and `--json`.
+- New `gx budget` subcommand wraps the new GitHub
+  `/settings/billing/usage` endpoint (the legacy
+  `/settings/billing/actions` endpoint was retired in early 2026) and
+  reports monthly Actions minute spend with warn/critical USD thresholds
+  per `--org` or `--user`.
+- Per-PR label opt-in for `agent/*` lanes: `needs-review` runs AI code
+  review on an otherwise-skipped agent PR; `needs-ci-full` triggers the
+  full cross-runtime matrix without waiting for the weekly schedule.
+- `gx branch finish` runs `scripts/agent-preflight.sh` in the worktree
+  before pushing. Default script auto-detects pnpm/npm, Rust, and Python
+  stacks and refuses the push on verification failure. After pre-flight
+  passes, draft PRs are promoted to ready-for-review so the
+  budget-friendly CI defaults fire once on a known-passing commit.
+
 ### v7.0.42
 - Bumped `@imdeadpool/guardex` from `7.0.41` to `7.0.42` so the current
   `main` payload can publish under a fresh npm version after `7.0.41` reached
