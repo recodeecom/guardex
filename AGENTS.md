@@ -85,7 +85,7 @@ The `/project-conventions` skill is auto-activated on code edits (PreToolUse gua
 | Convention              | Location                              | When                         |
 | ----------------------- | ------------------------------------- | ---------------------------- |
 | Code Conventions (Full) | `/project-conventions` skill          | On code edit (auto-enforced) |
-| Git Workflow            | `.agents/conventions/git-workflow.md` | Commit / PR                  |
+| Git Workflow            | `.codex/conventions/git-workflow.md` | Commit / PR                  |
 
 ## UI/UX Skill Default (UI Pro Max)
 
@@ -99,7 +99,8 @@ The `/project-conventions` skill is auto-activated on code edits (PreToolUse gua
 - Do not commit ephemeral local runtime artifacts (for example `.dev-ports.json` and `apps/logs/*.log`).
 - Treat local OMX/Codex session state files as agent-ignored (as if they were in `.gitignore`) even when they appear in working tree status.
 - Never stage or commit:
-  - `.agents/settings.local.json`
+  - `.codex/settings.local.json`
+  - `.claude/settings.local.json`
   - `.omc/project-memory.json`
   - `.omc/state/**`
   - `.omx/state/**`

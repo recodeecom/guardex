@@ -445,7 +445,6 @@ repo = pathlib.Path(sys.argv[1])
 hook_paths = [
     ".codex/hooks/skill_guard.py",
     ".claude/hooks/skill_guard.py",
-    ".agents/hooks/skill_guard.py",
 ]
 mutating_command = "cat > apps/frontend/src/features/scraper/components/scraping-agents-page.tsx <<'EOF'\nexport {}\nEOF"
 
