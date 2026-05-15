@@ -253,7 +253,7 @@ branch_has_worktree() {
 # content matches these are considered clean for prune purposes. Mirrors the
 # auto-transfer + auto-resolve allowlist from PRs #546/#547 (state-file globs
 # never carry authoritative content out of an agent branch).
-WORKTREE_STATE_EXCLUDE_GLOBS_DEFAULT='.omc/**:.omx/state/**:.dev-ports.json:apps/logs/**:.agents/settings.local.json:.codex/state/**:.claude/state/**'
+WORKTREE_STATE_EXCLUDE_GLOBS_DEFAULT='.omc/**:.omx/state/**:.dev-ports.json:apps/logs/**:.codex/settings.local.json:.claude/settings.local.json:.codex/state/**:.claude/state/**'
 WORKTREE_STATE_EXCLUDE_GLOBS_RAW="${GUARDEX_PRUNE_STATE_EXCLUDE_GLOBS-$WORKTREE_STATE_EXCLUDE_GLOBS_DEFAULT}"
 
 build_state_exclude_pathspec_args() {

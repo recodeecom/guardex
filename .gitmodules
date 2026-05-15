@@ -14,7 +14,3 @@
 	path = examples/skills_for_claude
 	url = https://github.com/NagyVikt/skills_for_claude.git
 	branch = main
-[submodule "vscode-material-icon-theme"]
-	path = vscode-material-icon-theme
-	url = https://github.com/NagyVikt/vscode-material-icon-theme.git
-	branch = main
