@@ -39,6 +39,12 @@ fi
 # Guardex agent worktree. In the latter case the inherited shell carries
 # `CLAUDECODE`, `CODEX_THREAD_ID`, `GUARDEX_AGENT_*`, etc., which would make
 # the CLI think we are reusing the parent worktree's session. Strip those.
+#
+# We also export `GUARDEX_CLI_ENTRY` + `GUARDEX_NODE_BIN` so the `gx` shim
+# scripts that `gx setup` writes into the fixture (`bin/...`, `scripts/...`)
+# can dispatch back to *this* CLI instead of an absent global `gx` PATH
+# entry. Tests in `test/finish.test.js` rely on the same env via
+# `runCmd()`/`runNode()` helpers.
 run_gx() {
   env \
     -u CODEX_THREAD_ID \
@@ -51,6 +57,8 @@ run_gx() {
     -u GIT_DIR \
     -u GIT_WORK_TREE \
     GUARDEX_HOME_DIR="${GUARDEX_HOME_DIR}" \
+    GUARDEX_CLI_ENTRY="${CLI_ENTRY}" \
+    GUARDEX_NODE_BIN="${NODE_BIN}" \
     "${NODE_BIN}" "${CLI_ENTRY}" "$@"
 }
 
@@ -286,6 +294,8 @@ set +e
     GUARDEX_E2E_ORIGIN_DIR="${ORIGIN_DIR}" \
     GUARDEX_E2E_BASE_BRANCH="main" \
     GUARDEX_HOME_DIR="${GUARDEX_HOME_DIR}" \
+    GUARDEX_CLI_ENTRY="${CLI_ENTRY}" \
+    GUARDEX_NODE_BIN="${NODE_BIN}" \
     "${NODE_BIN}" "${CLI_ENTRY}" branch finish \
     --branch "${AGENT_BRANCH}" \
     --base main \
