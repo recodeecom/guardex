@@ -18,5 +18,5 @@
 ## 4. Cleanup
 
 - [x] Focused verification: `node --test test/agents.test.js test/cli-args-dispatch.test.js test/agents-start-claims.test.js` -> 23/23 pass.
-- [ ] Finish via PR merge and sandbox cleanup.
+- [x] Finish via PR merge and sandbox cleanup.
 

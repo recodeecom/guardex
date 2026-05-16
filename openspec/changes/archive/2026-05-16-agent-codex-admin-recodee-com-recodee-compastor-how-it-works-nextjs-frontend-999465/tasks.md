@@ -20,6 +20,6 @@
 
 ## 4. Cleanup
 
-- [ ] 4.1 Run the cleanup pipeline: `bash scripts/agent-branch-finish.sh --branch agent/codex-admin-recodee-com/recodee-compastor-how-it-works-nextjs-frontend-999465 --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
-- [ ] 4.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) for this branch.
+- [x] 4.1 Run the cleanup pipeline: `bash scripts/agent-branch-finish.sh --branch agent/codex-admin-recodee-com/recodee-compastor-how-it-works-nextjs-frontend-999465 --base main --via-pr --wait-for-merge --cleanup`.
+- [x] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
+- [x] 4.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) for this branch.

@@ -20,6 +20,6 @@
 
 ## 4. Cleanup
 
-- [ ] 4.1 Run `bash scripts/agent-branch-finish.sh --branch "agent/codex/align-guardian-t-rex-package-description-2026-04-21-18-46" --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] 4.2 Record PR URL + final `MERGED` state in the completion handoff.
-- [ ] 4.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) or capture a `BLOCKED:` handoff if merge/cleanup is pending.
+- [x] 4.1 Run `bash scripts/agent-branch-finish.sh --branch "agent/codex/align-guardian-t-rex-package-description-2026-04-21-18-46" --base main --via-pr --wait-for-merge --cleanup`.
+- [x] 4.2 Record PR URL + final `MERGED` state in the completion handoff.
+- [x] 4.3 Confirm sandbox cleanup (`git worktree list`, `git branch -a`) or capture a `BLOCKED:` handoff if merge/cleanup is pending.

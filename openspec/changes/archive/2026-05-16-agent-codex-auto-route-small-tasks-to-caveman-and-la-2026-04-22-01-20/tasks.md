@@ -14,7 +14,7 @@
 
 ## 4. Cleanup
 
-- [ ] 4.1 Commit the Guardex template/test update with Lore trailers.
-- [ ] 4.2 Push the agent branch and open/update the PR.
-- [ ] 4.3 Merge to `main` and prune the sandbox worktree.
-- [ ] 4.4 Record PR URL and final `MERGED` evidence.
+- [x] 4.1 Commit the Guardex template/test update with Lore trailers.
+- [x] 4.2 Push the agent branch and open/update the PR.
+- [x] 4.3 Merge to `main` and prune the sandbox worktree.
+- [x] 4.4 Record PR URL and final `MERGED` evidence.

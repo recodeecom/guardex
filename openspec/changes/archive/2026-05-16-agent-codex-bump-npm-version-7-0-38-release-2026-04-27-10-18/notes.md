@@ -24,7 +24,7 @@ Verification:
 
 ## Cleanup
 
-- [ ] Run: `gx branch finish --branch agent/codex/bump-npm-version-7-0-38-release-2026-04-27-10-18 --base main --via-pr --wait-for-merge --cleanup`
-- [ ] Record PR URL + `MERGED` state in the completion handoff.
-- [ ] Create or update GitHub release `v7.0.38`.
-- [ ] Confirm sandbox worktree is gone (`git worktree list`, `git branch -a`).
+- [x] Run: `gx branch finish --branch agent/codex/bump-npm-version-7-0-38-release-2026-04-27-10-18 --base main --via-pr --wait-for-merge --cleanup`
+- [x] Record PR URL + `MERGED` state in the completion handoff.
+- [x] Create or update GitHub release `v7.0.38`.
+- [x] Confirm sandbox worktree is gone (`git worktree list`, `git branch -a`).
