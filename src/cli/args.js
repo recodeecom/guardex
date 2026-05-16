@@ -177,6 +177,8 @@ function parseSetupArgs(rawArgs, defaults) {
   const setupDefaults = {
     ...defaults,
     parentWorkspaceView: false,
+    speckit: true,
+    speckitForce: false,
   };
   const forwardedArgs = [];
 
@@ -188,6 +190,19 @@ function parseSetupArgs(rawArgs, defaults) {
     }
     if (arg === '--no-parent-workspace-view') {
       setupDefaults.parentWorkspaceView = false;
+      continue;
+    }
+    if (arg === '--no-speckit' || arg === '--skip-speckit') {
+      setupDefaults.speckit = false;
+      continue;
+    }
+    if (arg === '--speckit') {
+      setupDefaults.speckit = true;
+      continue;
+    }
+    if (arg === '--speckit-force' || arg === '--reinstall-speckit') {
+      setupDefaults.speckit = true;
+      setupDefaults.speckitForce = true;
       continue;
     }
     forwardedArgs.push(arg);

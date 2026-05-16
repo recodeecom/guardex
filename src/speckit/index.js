@@ -92,9 +92,24 @@ function runSpecifyInit(target, { dryRun, logger }) {
   return { status: 'ok' };
 }
 
-function installSpeckit({ target = process.cwd(), dryRun = false, prune = true, logger = console.log }) {
+function isSpecKitAlreadyInstalled(target) {
+  return fs.existsSync(path.join(target, '.specify', 'integration.json'));
+}
+
+function installSpeckit({
+  target = process.cwd(),
+  dryRun = false,
+  prune = true,
+  force = false,
+  silent = false,
+  logger = console.log,
+}) {
   const resolved = path.resolve(target);
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+    if (silent) {
+      logger(`[${TOOL_NAME}] ⚠️ speckit: target ${resolved} does not exist; skipping.`);
+      return { status: 'skipped', reason: 'no-target' };
+    }
     throw new Error(`Target directory does not exist: ${resolved}`);
   }
   if (!isGitRepo(resolved)) {
@@ -102,8 +117,19 @@ function installSpeckit({ target = process.cwd(), dryRun = false, prune = true, 
       `[${TOOL_NAME}] ⚠️ ${resolved} is not a git repo. Spec Kit will scaffold without git extension wiring.`,
     );
   }
+  if (!force && isSpecKitAlreadyInstalled(resolved)) {
+    logger(`[${TOOL_NAME}] ✅ Spec Kit already installed at ${resolved}/.specify (use --speckit-force to reinstall).`);
+    return { status: 'already-installed', target: resolved };
+  }
   const specifyPath = whichSpecify();
   if (!specifyPath) {
+    if (silent) {
+      logger(
+        `[${TOOL_NAME}] ⚠️ speckit: \`${SPECIFY_BIN}\` not on PATH; skipping speckit install. ` +
+        `Install with: ${SPECKIT_INSTALL_HINT}`,
+      );
+      return { status: 'skipped', reason: 'specify-missing' };
+    }
     throw new Error(
       `${SPECIFY_BIN} CLI not found on PATH. Install with:\n  ${SPECKIT_INSTALL_HINT}`,
     );
@@ -115,9 +141,7 @@ function installSpeckit({ target = process.cwd(), dryRun = false, prune = true, 
   const initResult = runSpecifyInit(resolved, { dryRun, logger });
 
   let pruned = [];
-  if (prune && initResult.status === 'ok') {
-    pruned = pruneSpecKitScaffolds(resolved, { dryRun, logger });
-  } else if (prune && dryRun) {
+  if (prune && (initResult.status === 'ok' || dryRun)) {
     pruned = pruneSpecKitScaffolds(resolved, { dryRun, logger });
   }
 
@@ -127,7 +151,7 @@ function installSpeckit({ target = process.cwd(), dryRun = false, prune = true, 
   logger(`  - Use slash skills: /speckit-constitution, /speckit-specify, /speckit-plan, /speckit-tasks, /speckit-implement`);
   logger(`  - Agent worktree flow is unchanged — run \`${SHORT_TOOL_NAME} pivot "<task>" "claude"\` to start work.`);
 
-  return { specifyPath, version, dryRun, prunedScaffolds: pruned };
+  return { status: 'installed', specifyPath, version, dryRun, prunedScaffolds: pruned, target: resolved };
 }
 
 function printSpeckitHelp() {
@@ -157,6 +181,7 @@ function runSpeckitCommand(rawArgs) {
   let target = process.cwd();
   let prune = true;
   let dryRun = false;
+  let force = false;
 
   while (args.length > 0) {
     const arg = args.shift();
@@ -182,10 +207,14 @@ function runSpeckitCommand(rawArgs) {
       dryRun = true;
       continue;
     }
+    if (arg === '--force' || arg === '--reinstall') {
+      force = true;
+      continue;
+    }
     throw new Error(`Unknown option: ${arg}`);
   }
 
-  installSpeckit({ target, prune, dryRun });
+  installSpeckit({ target, prune, dryRun, force });
 }
 
 module.exports = {
@@ -193,4 +222,5 @@ module.exports = {
   installSpeckit,
   pruneSpecKitScaffolds,
   whichSpecify,
+  isSpecKitAlreadyInstalled,
 };

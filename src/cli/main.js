@@ -2960,6 +2960,8 @@ function setup(rawArgs) {
     yesGlobalInstall: false,
     noGlobalInstall: false,
     allowProtectedBaseWrite: false,
+    speckit: true,
+    speckitForce: false,
   });
 
   const globalInstallStatus = toolchainModule.installGlobalToolchain(options);
@@ -3045,6 +3047,34 @@ function setup(rawArgs) {
     const { installPayload, fixPayload, parentWorkspace } = runSetupBootstrapInternal(perRepoOptions);
     printOperations(`Setup/install${repoLabel}`, installPayload, perRepoOptions.dryRun);
     printOperations(`Setup/fix${repoLabel}`, fixPayload, perRepoOptions.dryRun);
+
+    const speckitGloballyDisabled = perRepoOptions.noGlobalInstall === true;
+    if (perRepoOptions.speckit !== false && !speckitGloballyDisabled) {
+      try {
+        speckitModule.installSpeckit({
+          target: repoPath,
+          dryRun: perRepoOptions.dryRun,
+          prune: true,
+          force: perRepoOptions.speckitForce === true,
+          silent: true,
+        });
+      } catch (error) {
+        console.log(`[${TOOL_NAME}] ⚠️ speckit install skipped: ${error.message}`);
+      }
+    } else if (speckitGloballyDisabled && perRepoOptions.speckit === true && perRepoOptions.speckitForce) {
+      // Operator explicitly forced speckit despite --no-global-install — honor that.
+      try {
+        speckitModule.installSpeckit({
+          target: repoPath,
+          dryRun: perRepoOptions.dryRun,
+          prune: true,
+          force: true,
+          silent: true,
+        });
+      } catch (error) {
+        console.log(`[${TOOL_NAME}] ⚠️ speckit install skipped: ${error.message}`);
+      }
+    }
 
     if (perRepoOptions.dryRun) {
       continue;
