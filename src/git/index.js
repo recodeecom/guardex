@@ -1,6 +1,7 @@
 const fs = require('node:fs');
 const {
   path,
+  cachedSpawn,
   TOOL_NAME,
   GIT_PROTECTED_BRANCHES_KEY,
   GIT_BASE_BRANCH_KEY,
@@ -11,7 +12,26 @@ const {
   COMPOSE_HINT_FILES,
   LOCK_FILE_RELATIVE,
 } = require('../context');
-const { run } = require('../core/runtime');
+const { run: rawRun } = require('../core/runtime');
+
+// Route every spawn from this module through the process-scoped probe cache
+// in context.js. cachedSpawn falls through to cp.spawnSync for any command
+// not on its read-only allowlist (writes like `git commit`, `git push`,
+// `git checkout`, `git worktree add/remove`, etc.), so this substitution is
+// a strict perf optimization and changes no observable behavior. Preserves
+// rawRun's signature: (cmd, args, opts) -> spawnSync result.
+function run(cmd, args, options = {}) {
+  return cachedSpawn(cmd, args, {
+    encoding: 'utf8',
+    stdio: options.stdio || 'pipe',
+    cwd: options.cwd,
+    env: options.env ? { ...process.env, ...options.env } : process.env,
+    timeout: options.timeout,
+  });
+}
+// Keep rawRun referenced so a future write that intentionally bypasses the
+// cache stays trivial. (Currently nothing in this module needs to bypass.)
+void rawRun;
 
 function gitRun(repoRoot, args, { allowFailure = false } = {}) {
   const result = run('git', ['-C', repoRoot, ...args]);

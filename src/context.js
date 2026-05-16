@@ -691,11 +691,237 @@ const SCORECARD_RISK_BY_CHECK = {
   License: 'Low',
 };
 
+// ---------------------------------------------------------------------------
+// Process-scoped memoization for idempotent git/gh probes.
+//
+// Many gx commands (notably `gx doctor`, `gx status`, preflight checks) ask
+// git/gh the same read-only questions multiple times within a single Node
+// process (current branch, remote URL, worktree list, config values, PR
+// state). spawnSync is cheap individually but adds up across 20+ probes.
+//
+// Rules:
+//   * Cache only idempotent reads. Strict allowlist below.
+//   * Never cache writes, network mutations, or anything passing stdin.
+//   * Lifetime = this Node process only (no disk cache, no TTL beyond the
+//     process). A fresh `gx ...` invocation always starts cold.
+//   * Honors GUARDEX_PROBE_TRACE=1 to print `[probe]` / `[probe-hit]` lines
+//     on stderr so duplicate calls are observable.
+//   * Honors GUARDEX_PROBE_CACHE=0 to disable the cache entirely
+//     (escape hatch).
+// ---------------------------------------------------------------------------
+
+const PROBE_CACHE = new Map();
+const PROBE_TRACE_ENABLED = (() => {
+  const raw = String(process.env.GUARDEX_PROBE_TRACE || '').trim().toLowerCase();
+  return raw === '1' || raw === 'true' || raw === 'yes' || raw === 'on';
+})();
+const PROBE_CACHE_DISABLED = (() => {
+  const raw = String(process.env.GUARDEX_PROBE_CACHE || '').trim().toLowerCase();
+  return raw === '0' || raw === 'false' || raw === 'no' || raw === 'off';
+})();
+
+// Env vars that, if they differ between calls, must invalidate cache (because
+// they change git/gh's actual answer). Most env doesn't matter for read probes
+// so we deliberately key only on a small slice to keep cache hits high.
+const PROBE_CACHE_ENV_KEYS = [
+  'GIT_DIR',
+  'GIT_WORK_TREE',
+  'GIT_COMMON_DIR',
+  'GIT_INDEX_FILE',
+  'GITHUB_TOKEN',
+  'GH_TOKEN',
+  'GH_HOST',
+];
+
+function envSubsetKey(envOverride) {
+  const env = envOverride || process.env;
+  const parts = [];
+  for (const key of PROBE_CACHE_ENV_KEYS) {
+    if (env[key] !== undefined) parts.push(`${key}=${env[key]}`);
+  }
+  return parts.join('');
+}
+
+// Strip a leading `-C <path>` (or `-c key=value`) pair from git args so we
+// look at the real verb after global options.
+function gitVerbAndRest(args) {
+  if (!Array.isArray(args) || args.length === 0) return { verb: '', rest: [] };
+  let i = 0;
+  while (i < args.length) {
+    const a = args[i];
+    if (a === '-C' && i + 1 < args.length) {
+      i += 2;
+      continue;
+    }
+    if (a === '-c' && i + 1 < args.length) {
+      i += 2;
+      continue;
+    }
+    if (typeof a === 'string' && a.startsWith('-c') && a !== '-c') {
+      i += 1;
+      continue;
+    }
+    break;
+  }
+  return { verb: args[i] || '', rest: args.slice(i + 1) };
+}
+
+// A git command is cacheable only if its answer is invariant for the lifetime
+// of the process under our own commands' behavior. Many git "reads"
+// (`status`, `diff`, `for-each-ref`, `rev-list`, `ls-files`, `worktree list`,
+// `branch --show-current`, `merge-base --is-ancestor`) can change mid-run
+// because gx itself writes (commits, branch ops, worktree add/remove, config
+// writes). Caching those would feed callers stale answers and break command
+// flows. The narrow allowlist below intentionally covers only:
+//   * filesystem geometry that git itself treats as fixed for a given repo
+//     checkout (`rev-parse --show-toplevel|--git-common-dir|--git-dir|
+//     --show-cdup|--show-superproject-working-tree|--is-inside-work-tree|
+//     --is-bare-repository`)
+//   * tool version banners (`--version`)
+// Everything else falls through to a real spawn each time.
+function gitIsCacheableRead(args) {
+  const { verb, rest } = gitVerbAndRest(args);
+  if (!verb) return false;
+
+  if (verb === '--version' || verb === 'version') return true;
+
+  if (verb === 'rev-parse') {
+    // Allow ONLY the geometry-probe forms whose answer never depends on the
+    // working-tree, ref state, or config. Concrete ref resolution
+    // (`rev-parse HEAD`, `rev-parse --verify <ref>`) is intentionally NOT
+    // cached because gx writes refs.
+    for (const a of rest) {
+      if (typeof a !== 'string') continue;
+      if (a.startsWith('-')) {
+        if (
+          a === '--show-toplevel' ||
+          a === '--git-common-dir' ||
+          a === '--git-dir' ||
+          a === '--show-cdup' ||
+          a === '--show-superproject-working-tree' ||
+          a === '--is-inside-work-tree' ||
+          a === '--is-inside-git-dir' ||
+          a === '--is-bare-repository' ||
+          a === '--show-prefix'
+        ) {
+          // continue scanning to make sure no ref-probe is also present
+          continue;
+        }
+        // Any other flag (--verify, --short, --abbrev-ref, etc.) means we're
+        // resolving a ref, which is mutable.
+        return false;
+      }
+      // Bare positional (e.g. a ref name) -> ref resolution, mutable.
+      return false;
+    }
+    return rest.length > 0;
+  }
+  return false;
+}
+
+// gh probes that ARE safe to cache within a single process: only the version
+// banner. Auth state can change (login/logout in another shell), PR state
+// can change (a merge can land mid-poll). The instruction's allowlist
+// included `gh auth status`, `gh api -X GET`, `gh pr view --json`, etc.;
+// those are read-only from gh's side but their underlying truth shifts under
+// gx's own writes (`gh pr create`, `gh pr merge`, `gh auth refresh`, server
+// state). Within a single doctor sweep we explicitly want to re-query auth
+// and PR state, so caching them would mask freshly-changed reality.
+function ghIsCacheableRead(args) {
+  if (!Array.isArray(args) || args.length === 0) return false;
+  const verb = args[0] || '';
+  if (verb === '--version' || verb === 'version') return true;
+  return false;
+}
+
+function isCacheableSpawn(cmd, args, options) {
+  if (PROBE_CACHE_DISABLED) return false;
+  if (!cmd || typeof cmd !== 'string') return false;
+  if (options && options.input !== undefined && options.input !== null) return false;
+  // Pass-through if stdio is anything other than fully pipe/ignore (callers
+  // that inherit stdio need the real child to print, not a cached payload).
+  if (options && options.stdio && options.stdio !== 'pipe' && options.stdio !== 'ignore') {
+    if (Array.isArray(options.stdio)) {
+      for (const leg of options.stdio) {
+        if (leg && leg !== 'pipe' && leg !== 'ignore' && leg !== null) return false;
+      }
+    } else {
+      return false;
+    }
+  }
+  const base = path.basename(cmd);
+  if (base === 'git') return gitIsCacheableRead(args || []);
+  if (base === 'gh' || base === 'ghx') return ghIsCacheableRead(args || []);
+  if (base === 'which' || base === 'command' || base === 'type') {
+    return Array.isArray(args) && args.length >= 1;
+  }
+  return false;
+}
+
+function probeTrace(prefix, cmd, args) {
+  if (!PROBE_TRACE_ENABLED) return;
+  try {
+    process.stderr.write(`[${prefix}] ${cmd} ${(args || []).join(' ')}\n`);
+  } catch {
+    // Tracing must never break the probe.
+  }
+}
+
+function cachedSpawn(cmd, args, options) {
+  const cacheable = isCacheableSpawn(cmd, args, options);
+  if (!cacheable) {
+    probeTrace('probe', cmd, args);
+    return cp.spawnSync(cmd, args, options);
+  }
+  const cwdKey = (options && options.cwd) || process.cwd();
+  const envKey = options && options.env
+    ? envSubsetKey({ ...process.env, ...options.env })
+    : envSubsetKey(process.env);
+  const key = `${cmd} ${JSON.stringify(args || [])} ${cwdKey} ${envKey}`;
+  const cached = PROBE_CACHE.get(key);
+  if (cached) {
+    probeTrace('probe-hit', cmd, args);
+    // Clone so callers that mutate the result don't poison the cache.
+    return {
+      pid: cached.pid,
+      status: cached.status,
+      signal: cached.signal,
+      stdout: cached.stdout,
+      stderr: cached.stderr,
+      output: cached.output ? cached.output.slice() : cached.output,
+      error: cached.error,
+    };
+  }
+  probeTrace('probe', cmd, args);
+  const result = cp.spawnSync(cmd, args, options);
+  // Don't cache spawn errors (ENOENT etc.) — they may resolve on retry with a
+  // different binary path.
+  if (result && result.error) {
+    return result;
+  }
+  PROBE_CACHE.set(key, {
+    pid: result && result.pid,
+    status: result && result.status,
+    signal: result && result.signal,
+    stdout: result && result.stdout,
+    stderr: result && result.stderr,
+    output: result && result.output,
+    error: result && result.error,
+  });
+  return result;
+}
+
+function clearProbeCache() {
+  PROBE_CACHE.clear();
+}
+
 module.exports = {
   fs,
   os,
   path,
   cp,
+  cachedSpawn,
+  clearProbeCache,
   PACKAGE_ROOT,
   CLI_ENTRY_PATH,
   packageJsonPath,

@@ -1,6 +1,7 @@
 const {
   fs,
   path,
+  cachedSpawn,
   TOOL_NAME,
   SHORT_TOOL_NAME,
   GH_BIN,
@@ -11,7 +12,24 @@ const {
   AGENT_WORKTREE_RELATIVE_DIRS,
   defaultAgentWorktreeRelativeDir,
 } = require('../context');
-const { run, runPackageAsset } = require('../core/runtime');
+const { run: rawRun, runPackageAsset } = require('../core/runtime');
+
+// Route doctor probe-running calls through the process-scoped probe cache.
+// cachedSpawn falls through to cp.spawnSync for any non-allowlisted call
+// (git commit/push/stash/checkout, gh auth login, etc.), so writes are never
+// cached. Doctor fires the same read questions many times within one run
+// (current branch, remote URL, worktree list, gh auth status) — caching
+// those is a pure perf win.
+function run(cmd, args, options = {}) {
+  return cachedSpawn(cmd, args, {
+    encoding: 'utf8',
+    stdio: options.stdio || 'pipe',
+    cwd: options.cwd,
+    env: options.env ? { ...process.env, ...options.env } : process.env,
+    timeout: options.timeout,
+  });
+}
+void rawRun;
 const {
   currentBranchName,
   gitRefExists,
