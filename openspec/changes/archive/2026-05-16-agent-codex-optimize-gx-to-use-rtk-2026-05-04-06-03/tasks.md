@@ -20,5 +20,5 @@
 
 ## 5. Cleanup
 
-- [ ] Commit, push, PR, merge, and sandbox cleanup through `gx branch finish --branch "agent/codex/optimize-gx-to-use-rtk-2026-05-04-06-03" --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] Record final PR URL, `MERGED` state, and cleanup evidence.
+- [x] Commit, push, PR, merge, and sandbox cleanup through `gx branch finish --branch "agent/codex/optimize-gx-to-use-rtk-2026-05-04-06-03" --base main --via-pr --wait-for-merge --cleanup`.
+- [x] Record final PR URL, `MERGED` state, and cleanup evidence.

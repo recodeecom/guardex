@@ -27,6 +27,6 @@ Handoff: 2026-04-23 14:20Z codex owns the Active Agents live/template manifests,
 
 ## 4. Cleanup (mandatory; run before claiming completion)
 
-- [ ] 4.1 Run the cleanup pipeline: `gx branch finish --branch agent/codex/move-active-agents-to-own-sidebar-icon-2026-04-23-14-13 --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
-- [ ] 4.3 Confirm the sandbox worktree is gone (`git worktree list` no longer shows the agent path; `git branch -a` shows no surviving local/remote refs for the branch).
+- [x] 4.1 Run the cleanup pipeline: `gx branch finish --branch agent/codex/move-active-agents-to-own-sidebar-icon-2026-04-23-14-13 --base main --via-pr --wait-for-merge --cleanup`.
+- [x] 4.2 Record the PR URL and final merge state (`MERGED`) in the completion handoff.
+- [x] 4.3 Confirm the sandbox worktree is gone (`git worktree list` no longer shows the agent path; `git branch -a` shows no surviving local/remote refs for the branch).

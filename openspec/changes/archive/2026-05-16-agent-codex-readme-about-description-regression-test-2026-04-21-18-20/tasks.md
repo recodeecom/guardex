@@ -14,4 +14,4 @@
 
 ## 4. Cleanup
 
-- [ ] 4.1 Branch is ready for `agent-branch-finish --via-pr --wait-for-merge --cleanup` with PR URL + `MERGED` evidence recorded.
+- [x] 4.1 Branch is ready for `agent-branch-finish --via-pr --wait-for-merge --cleanup` with PR URL + `MERGED` evidence recorded.

@@ -16,6 +16,6 @@
 
 ## 4. Cleanup
 
-- [ ] 4.1 Run `bash scripts/agent-branch-finish.sh --branch agent/codex/pr-merge-current-main-changes-2026-04-20-00-29 --base main --via-pr --wait-for-merge --cleanup`.
-- [ ] 4.2 Record PR URL and final merge state.
-- [ ] 4.3 Confirm sandbox worktree and refs are cleaned up.
+- [x] 4.1 Run `bash scripts/agent-branch-finish.sh --branch agent/codex/pr-merge-current-main-changes-2026-04-20-00-29 --base main --via-pr --wait-for-merge --cleanup`.
+- [x] 4.2 Record PR URL and final merge state.
+- [x] 4.3 Confirm sandbox worktree and refs are cleaned up.
