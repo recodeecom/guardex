@@ -29,6 +29,7 @@ const MANAGED_HOOK_FILES = [
 ];
 
 const MANAGED_SLASH_COMMANDS = [
+  'gx-act.md',
   'gx-doctor.md',
   'gx-finish.md',
   'gx-pivot.md',

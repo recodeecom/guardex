@@ -18,8 +18,11 @@ If you are a Claude Code session arriving in this repo for the first time:
    namespaces, set `GUARDEX_AGENT_BRANCH_PREFIXES_ONLY=1` plus an explicit
    list.
 2. **Slash commands** — `/gx-status`, `/gx-doctor`, `/gx-pivot`,
-   `/gx-pr`, `/gx-finish`, `/gx-setup` are available out of the box. See
-   `.claude/commands/`.
+   `/gx-pr`, `/gx-finish`, `/gx-setup`, `/gx-act` are available out of the
+   box. See `.claude/commands/`. `/gx-act` wraps
+   [nektos/act](https://github.com/nektos/act) so CI workflows run locally
+   before the remote PR run, letting you squash-merge on the first green
+   round-trip.
 3. **PR flow** — when you need explicit PR control, use `gx pr open`,
    `gx pr status`, `gx pr sync`, or `gx pr watch`. For end-of-task
    commit + push + PR + merge + cleanup, still use the non-negotiable
